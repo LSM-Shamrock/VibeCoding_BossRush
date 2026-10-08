@@ -19,6 +19,14 @@ import type { FloatKind, Host, Target } from './types';
 import { PAL } from './palette';
 
 const V3 = THREE.Vector3;
+const TAU = Math.PI * 2;
+const lerpAngle = (a: number, b: number, t: number) => {
+  let d = (b - a) % TAU;
+  if (d > Math.PI) d -= TAU;
+  if (d < -Math.PI) d += TAU;
+  return a + d * t;
+};
+const clampN = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const BEST_KEY = 'deepnest.best.spider';
 
 type GameState = 'title' | 'intro' | 'play' | 'victory' | 'over' | 'clear';
@@ -36,7 +44,7 @@ class Game implements Host {
   targets: Target[] = [];
 
   private renderer: THREE.WebGLRenderer;
-  private camera: THREE.PerspectiveCamera;
+  readonly camera: THREE.PerspectiveCamera;
   private composer: EffectComposer;
   private bloom: UnrealBloomPass;
   private binds = new Keybinds();
@@ -53,15 +61,27 @@ class Game implements Host {
   private time = 0;
   private fps = 60;
   private shakeAmt = 0;
+  private fovKick = 0;
   private hitStopT = 0;
   private slowScale = 1;
   private slowT = 0;
-  private camFocus = new V3();
-  private ray = new THREE.Raycaster();
-  private plane = new THREE.Plane(new V3(0, 1, 0), 0);
+  // 어깨 너머 카메라
+  private camYaw = Math.PI; // 바라보는 방향 (앞 = (sin, cos))
+  private camPitch = (CFG.camera.pitchDeg * Math.PI) / 180; // 내려다보는 각 (+ = 아래)
+  private camDist: number = CFG.camera.dist;
+  private lockOn = false;
+  private lookTmp = { x: 0, y: 0 };
   private aim = new V3(0, 0, 0);
-  private reticle: THREE.Group;
-  private aimLine: THREE.Line;
+  private throwAim = new V3(0, 0, 0);
+  private aim3 = new V3(0, 1.1, 24);
+  private rayO = new V3();
+  private rayD = new V3();
+  private camPos = new V3();
+  private tmpV = new V3();
+  private crossEl = document.getElementById('cross') as HTMLElement;
+  private lockEl = document.getElementById('lockon') as HTMLElement;
+  private hadLock = false;
+  private lockLostAt = -1e9;
   private debugOn = false;
 
   // 전투 흐름
@@ -84,7 +104,7 @@ class Game implements Host {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;
 
-    this.camera = new THREE.PerspectiveCamera(CFG.camera.fov, window.innerWidth / window.innerHeight, 0.5, 200);
+    this.camera = new THREE.PerspectiveCamera(CFG.camera.fov, window.innerWidth / window.innerHeight, 0.15, 200);
 
     // 후처리: MSAA 렌더타깃 + Bloom(발광 부위만 번짐) + 톤매핑 출력
     const rt = new THREE.WebGLRenderTarget(window.innerWidth * pr, window.innerHeight * pr, { type: THREE.HalfFloatType, samples: 4 });
@@ -105,18 +125,18 @@ class Game implements Host {
     this.refreshKeyLabels();
     this.binds.onChange(() => this.refreshKeyLabels());
 
-    // 조준 커서 + 조준선
-    this.reticle = new THREE.Group();
-    const rm = new THREE.MeshBasicMaterial({ color: PAL.gold, transparent: true, opacity: 0.9, toneMapped: false, depthWrite: false });
-    rm.color.multiplyScalar(1.4);
-    this.reticle.add(new THREE.Mesh(new THREE.RingGeometry(0.3, 0.38, 32).rotateX(-Math.PI / 2), rm));
-    this.reticle.add(new THREE.Mesh(new THREE.CircleGeometry(0.06, 12).rotateX(-Math.PI / 2), rm));
-    this.reticle.position.y = 0.08;
-    this.scene.add(this.reticle);
-    const lg = new THREE.BufferGeometry().setFromPoints([new V3(), new V3()]);
-    this.aimLine = new THREE.Line(lg, new THREE.LineBasicMaterial({ color: PAL.gold, transparent: true, opacity: 0.22, depthWrite: false }));
-    this.aimLine.frustumCulled = false;
-    this.scene.add(this.aimLine);
+    // 포인터 락: 마우스를 가두고 움직임을 시점 회전에 쓴다. 락이 풀리면(Esc 포함) 일시정지.
+    document.addEventListener('pointerlockchange', () => {
+      const locked = this.input.locked;
+      if (this.hadLock && !locked && !this.paused && (this.state === 'play' || this.state === 'intro')) {
+        this.lockLostAt = performance.now();
+        this.setPaused(true);
+      }
+      this.hadLock = locked;
+    });
+    canvas.addEventListener('pointerdown', () => {
+      if (!this.paused && this.state !== 'title' && !this.input.locked) this.lockPointer();
+    });
 
     this.player.onDeath = () => {
       if (this.state === 'victory' || this.state === 'clear') return;
@@ -130,7 +150,7 @@ class Game implements Host {
     this.hud.showOverlay(
       'DEEP NEST',
       `1층 · 거미굴 — <b>동굴 여왕 거미</b><br>
-       <span style="color:#a8957c">${this.binds.moveSummary()} 이동 · 마우스 조준(자동 사격) · ${this.binds.label('dash')} 대시(무적) · ${this.binds.label('special')} 특수기</span><br>
+       <span style="color:#a8957c">${this.binds.moveSummary()} 이동 · 마우스 시점 회전 · 왼쪽 버튼 길게 눌러 불꽃 모으기(떼면 발사) · ${this.binds.label('lockon')} 락온 · ${this.binds.label('dash')} 대시(무적) · ${this.binds.label('special')} 특수기</span><br>
        <span style="color:#a8957c">예고선과 바닥 마커가 보이면 피하고, 거미의 몸이 곧 신호다. 배(주황빛)가 약점.</span><br>
        <span style="color:#a8957c">Esc 로 일시정지 — 그 화면에서 키를 바꿀 수 있습니다.</span><br>
        <div class="go">클릭하여 시작</div>`,
@@ -148,6 +168,9 @@ class Game implements Host {
   /* ───────────── Host 구현 ───────────── */
   shake(amount: number) {
     this.shakeAmt = Math.min(1.8, Math.max(this.shakeAmt, amount));
+  }
+  punch(deg: number) {
+    this.fovKick = Math.max(this.fovKick, deg);
   }
   hitStop(seconds: number) {
     this.hitStopT = Math.max(this.hitStopT, seconds);
@@ -175,6 +198,16 @@ class Game implements Host {
     }
   }
 
+  private lockPointer() {
+    try {
+      const c = document.getElementById('c') as HTMLCanvasElement;
+      const r = c.requestPointerLock() as unknown as Promise<void> | undefined;
+      r?.catch?.(() => {});
+    } catch {
+      /* 포인터 락을 못 쓰는 환경이면 락 없이 진행 */
+    }
+  }
+
   private setPaused(p: boolean) {
     this.paused = p;
     if (p) {
@@ -184,6 +217,7 @@ class Game implements Host {
       this.keyPanel.close();
       this.hud.hideOverlay();
       (document.getElementById('c') as HTMLCanvasElement).focus();
+      this.lockPointer();
     }
   }
 
@@ -208,6 +242,10 @@ class Game implements Host {
     this.keyPanel.close();
     this.hud.hideOverlay();
     (document.getElementById('c') as HTMLCanvasElement).focus();
+    this.lockOn = false;
+    this.camYaw = Math.atan2(-this.player.pos.x, -this.player.pos.z); // 아레나 중앙(보스)을 향해 시작
+    this.camPitch = (CFG.camera.pitchDeg * Math.PI) / 180;
+    this.lockPointer();
   }
 
   private onBossDeath() {
@@ -295,7 +333,9 @@ class Game implements Host {
     if ((this.state === 'over' && this.overShown) || this.state === 'clear') {
       if (this.input.tapped('retry') || this.input.hit('Enter')) this.onOverlayClick();
     }
-    if (this.input.hit('Escape') && (this.state === 'play' || this.state === 'intro' || this.paused)) this.setPaused(!this.paused);
+    if (this.input.hit('Escape') && (this.state === 'play' || this.state === 'intro' || this.paused) && performance.now() - this.lockLostAt > 300) {
+      this.setPaused(!this.paused);
+    }
     if (this.input.tapped('mute')) {
       this.sfx.setMuted(!this.sfx.muted);
       this.hud.toast(this.sfx.muted ? '소리 꺼짐' : '소리 켜짐');
@@ -319,24 +359,25 @@ class Game implements Host {
 
     if (this.state !== 'title') {
       this.debugKeys();
-      if (this.input.tapped('autofire')) {
-        this.player.autoFire = !this.player.autoFire;
-        this.hud.toast(this.player.autoFire ? '자동 사격 ON' : '자동 사격 OFF (마우스 왼쪽 버튼을 누르고 있는 동안 발사)');
-      }
     }
 
+    this.updateLook(raw);
     this.updateAim();
     // 일시정지 중에는 게임 입력(대시/특수기 등)을 처리하지 않는다 — 키 설정 화면에서 누른 키가 게임에 새지 않도록
     if (this.state !== 'title' && !this.paused) {
+      this.player.ceaseFire = this.state === 'victory' || this.state === 'clear';
+      this.player.trigger = this.input.mouseDown && (this.input.locked || this.manual);
       this.player.update(dt, this.input, this.aim);
       this.player.arrows.update(dt);
       this.boss?.update(dt);
       this.updateFlow(raw, dt);
+    } else if (this.paused) {
+      this.player.cancelDraw(); // 일시정지 중에 놓은 버튼으로 불꽃이 나가지 않게
     }
     this.fx.update(dt);
     this.arena.update(raw, this.time);
     this.updateCamera(raw);
-    this.updateReticle();
+    this.updateCrosshair();
 
     const boss = this.boss && this.boss.alive && this.state !== 'title' ? this.boss : null;
     const reveal = this.state === 'intro' ? Math.min(1, Math.max(0, (this.introT - (this.dropIntro ? 1.0 : 0.1)) / 1.2)) : 1;
@@ -347,7 +388,6 @@ class Game implements Host {
       boss,
       bossReveal: reveal,
       god: this.player.god,
-      autoFire: this.player.autoFire,
       muted: this.sfx.muted,
       bossAttacks: this.boss?.attacksOn ?? true,
       slowed: this.player.slowT > 0 && !this.player.dead,
@@ -406,8 +446,13 @@ class Game implements Host {
     }
     if (i.hit('Digit6')) this.startFight(false);
     if (i.hit('Digit7') && boss.alive) {
-      boss.setHpFrac(CFG.spider.phase2At - 0.001);
-      this.hud.toast('페이즈 2 진입 예약');
+      const next = (CFG.spider.phaseAt as readonly number[])[boss.phaseIndex];
+      if (next === undefined) {
+        this.hud.toast('마지막 페이즈입니다');
+      } else {
+        boss.setHpFrac(next - 0.001);
+        this.hud.toast(`페이즈 ${boss.phaseIndex + 2} 진입 예약`);
+      }
     }
     if (i.hit('Digit8') && boss.alive) boss.setHpFrac(0.05);
     if (i.hit('Digit9') && boss.alive && boss.ready) {
@@ -417,44 +462,167 @@ class Game implements Host {
     }
   }
 
-  private updateAim() {
-    this.ray.setFromCamera(this.input.mouseNDC, this.camera);
-    const hit = this.ray.ray.intersectPlane(this.plane, this.tmpAim);
-    if (hit) this.aim.copy(hit);
+  /** 마우스/락온으로 카메라 방향(요·피치) 갱신 */
+  private updateLook(raw: number) {
+    const C = CFG.camera;
+    const look = this.lookTmp;
+    this.input.takeLook(look);
+    const playing = !this.paused && this.state !== 'title' && this.state !== 'over' && this.state !== 'clear';
+    const b = this.boss && this.boss.alive ? this.boss : null;
+    if (this.input.hit('MouseMiddle') || this.input.tapped('lockon')) {
+      if (playing && !this.input.hit('Escape')) {
+        this.lockOn = !this.lockOn && !!b;
+        this.hud.toast(this.lockOn ? '락온' : '락온 해제');
+      }
+    }
+    if (!b) this.lockOn = false;
+    if (!playing || !this.input.locked) return;
+    if (this.lockOn && b) {
+      // 락온: 카메라가 보스 쪽으로 따라 돈다 (좌우 마우스는 무시, 상하는 허용)
+      const target = Math.atan2(b.pos.x - this.player.pos.x, b.pos.z - this.player.pos.z);
+      this.camYaw = lerpAngle(this.camYaw, target, 1 - Math.exp(-C.lockSmooth * raw));
+    } else {
+      this.camYaw -= look.x * C.sens;
+    }
+    this.camPitch = clampN(this.camPitch + look.y * C.sens, (C.pitchMin * Math.PI) / 180, (C.pitchMax * Math.PI) / 180);
   }
-  private tmpAim = new V3();
+
+  /** 조준점: 크로스헤어(화면 중앙)가 가리키는 방향. 락온 중이면 보스. */
+  private updateAim() {
+    const C = CFG.camera;
+    const p = this.player.pos;
+    const fx = Math.sin(this.camYaw);
+    const fz = Math.cos(this.camYaw);
+    const rx = -fz;
+    const rz = fx;
+    // 화면 중앙선은 어깨(피벗)를 지나므로 그 선 위의 먼 점을 조준한다
+    const px = p.x + rx * C.shoulder;
+    const pz = p.z + rz * C.shoulder;
+    const b = this.boss && this.boss.alive ? this.boss : null;
+    if (this.lockOn && b) {
+      this.aim.set(b.pos.x, 0, b.pos.z);
+    } else {
+      this.aim.set(px + fx * 24, 0, pz + fz * 24);
+    }
+    // 특수기 투척점: 락온이면 보스, 아니면 정면 40° 안의 보스(보조 조준), 없으면 정면 9칸
+    this.throwAim.set(p.x + fx * 9, 0, p.z + fz * 9);
+    if (b) {
+      const dx = b.pos.x - p.x;
+      const dz = b.pos.z - p.z;
+      const d = Math.hypot(dx, dz) || 1;
+      if (this.lockOn || (dx * fx + dz * fz) / d > Math.cos((40 * Math.PI) / 180)) this.throwAim.set(b.pos.x, 0, b.pos.z);
+    }
+    this.updateAim3(fx, fz, px, pz, b);
+    this.player.camYaw = this.camYaw;
+    this.player.throwAim = this.throwAim;
+  }
+
+  /** 시점 중심 높이: 위를 볼수록 올라간다 */
+  private pivotY() {
+    return CFG.camera.pivotY + Math.max(0, -Math.sin(this.camPitch)) * CFG.camera.lookUpLift;
+  }
+
+  /**
+   * 조준점(3D): 화면 중앙 십자가(어깨 피벗을 지나는 시선)가 실제로 가리키는 점.
+   * 시선이 처음 닿는 것 — 보스 몸(몸통/배 구) → 바닥 — 이고, 아무것도 없으면 먼 점.
+   * 보정(자동 조준)은 없다. 락온 중에만 보스 몸통을 향한다.
+   */
+  private updateAim3(fx: number, fz: number, px: number, pz: number, b: Spider | null) {
+    const cp = Math.cos(this.camPitch);
+    const O = this.rayO.set(px, this.pivotY(), pz);
+    const D = this.rayD.set(fx * cp, -Math.sin(this.camPitch), fz * cp);
+    if (b && this.lockOn) {
+      const th = b.rig.thorax;
+      this.aim3.set(th.x, th.y, th.z);
+    } else {
+      let s = 60;
+      if (D.y < -1e-3) s = Math.min(s, (O.y - 0.05) / -D.y); // 바닥
+      if (b) {
+        for (const c of [b.rig.thorax, b.rig.abdomenC]) {
+          // 시선과 구의 첫 교점
+          const wx = c.x - O.x;
+          const wy = c.y - O.y;
+          const wz = c.z - O.z;
+          const tca = wx * D.x + wy * D.y + wz * D.z;
+          if (tca <= 0) continue;
+          const d2 = wx * wx + wy * wy + wz * wz - tca * tca;
+          if (d2 >= c.r * c.r) continue;
+          const t = tca - Math.sqrt(c.r * c.r - d2);
+          if (t > 0.5 && t < s) s = t;
+        }
+      }
+      this.aim3.set(O.x + D.x * s, O.y + D.y * s, O.z + D.z * s);
+    }
+    this.player.aimPoint.copy(this.aim3);
+    this.player.aimDir.copy(D);
+  }
 
   private updateCamera(raw: number) {
-    // 플레이어를 부분적으로만 따라가는 쿼터뷰 고정 카메라
+    const C = CFG.camera;
     const p = this.player.pos;
-    const b = this.boss && this.boss.alive ? this.boss.pos : null;
-    const tx = p.x * CFG.camera.followRatio + (b ? b.x * CFG.camera.bossRatio : 0);
-    const tz = p.z * CFG.camera.followRatio + (b ? b.z * CFG.camera.bossRatio : 0);
-    const l = Math.hypot(tx, tz);
-    const k = l > CFG.camera.followMax ? CFG.camera.followMax / l : 1;
-    this.camFocus.x += (tx * k - this.camFocus.x) * (1 - Math.exp(-CFG.camera.smooth * raw));
-    this.camFocus.z += (tz * k - this.camFocus.z) * (1 - Math.exp(-CFG.camera.smooth * raw));
+    const fx = Math.sin(this.camYaw);
+    const fz = Math.cos(this.camYaw);
+    const cp = Math.cos(this.camPitch);
+    const sp = Math.sin(this.camPitch);
+    const dx = fx * cp;
+    const dy = -sp;
+    const dz = fz * cp;
+    const px = p.x - fz * C.shoulder;
+    const pz = p.z + fx * C.shoulder;
+    const py = this.pivotY();
 
-    const el = (CFG.camera.elevationDeg * Math.PI) / 180;
-    // 좁은 화면에서도 아레나 좌우가 잘리지 않도록 거리를 늘린다
-    const hTan = Math.tan((CFG.camera.fov * Math.PI) / 360) * this.camera.aspect;
-    const d = Math.max(CFG.camera.distance, (CFG.arena.radius + 2) / hTan);
+    // 외벽 안쪽에 머물도록: 피벗→카메라 선분이 wallLimit 원을 넘으면 거리를 줄인다
+    let want: number = C.dist;
+    const ox = -dx; // 피벗에서 카메라 방향(수평)
+    const oz = -dz;
+    const a = ox * ox + oz * oz;
+    const bq = px * ox + pz * oz;
+    const c = px * px + pz * pz - C.wallLimit * C.wallLimit;
+    if (a > 1e-6 && c < 0) {
+      const t = (-bq + Math.sqrt(Math.max(0, bq * bq - a * c))) / a;
+      want = Math.min(want, Math.max(C.minDist, t));
+    }
+    if (sp < -1e-3) want = Math.min(want, Math.max(C.minDist, (py - C.floorY) / -sp));
+    const k = want < this.camDist ? 1 - Math.exp(-18 * raw) : 1 - Math.exp(-4 * raw);
+    this.camDist += (want - this.camDist) * k;
+
     this.shakeAmt *= Math.exp(-9 * raw);
-    const sx = (Math.random() - 0.5) * 2 * this.shakeAmt * 0.45;
-    const sy = (Math.random() - 0.5) * 2 * this.shakeAmt * 0.45;
-    this.camera.position.set(this.camFocus.x + sx, d * Math.sin(el) + sy, this.camFocus.z + d * Math.cos(el));
-    this.camera.lookAt(this.camFocus.x, 0, this.camFocus.z);
+    const sx = (Math.random() - 0.5) * 2 * this.shakeAmt * 0.12;
+    const sy = (Math.random() - 0.5) * 2 * this.shakeAmt * 0.12;
+    const cx = px - dx * this.camDist + sx;
+    const cy = Math.max(0.35, py - dy * this.camDist + sy);
+    const cz = pz - dz * this.camDist;
+    // FOV 펀치 (대시 등): 순식간에 벌어졌다가 부드럽게 돌아온다
+    this.fovKick *= Math.exp(-9 * raw);
+    const fov = C.fov + (this.fovKick > 0.02 ? this.fovKick : 0);
+    if (Math.abs(this.camera.fov - fov) > 0.01) {
+      this.camera.fov = fov;
+      this.camera.updateProjectionMatrix();
+    }
+    this.camera.position.set(cx, cy, cz);
+    this.camPos.set(cx, cy, cz);
+    this.camera.lookAt(cx + dx * 10, cy + dy * 10, cz + dz * 10);
   }
 
-  private updateReticle() {
-    this.reticle.visible = this.state !== 'title';
-    this.aimLine.visible = (this.state === 'play' || this.state === 'intro') && !this.player.dead;
-    this.reticle.position.set(this.aim.x, 0.08, this.aim.z);
-    this.reticle.scale.setScalar(1 + 0.08 * Math.sin(this.time * 8));
-    const pos = this.aimLine.geometry.getAttribute('position') as THREE.BufferAttribute;
-    pos.setXYZ(0, this.player.pos.x, 0.9, this.player.pos.z);
-    pos.setXYZ(1, this.aim.x, 0.08, this.aim.z);
-    pos.needsUpdate = true;
+  private updateCrosshair() {
+    const show = (this.state === 'play' || this.state === 'intro') && !this.paused && !this.player.dead && this.input.locked;
+    const b = this.boss && this.boss.alive ? this.boss : null;
+    const locking = show && this.lockOn && !!b;
+    this.crossEl.classList.toggle('hidden', !show || locking);
+    const ch = this.player.drawn ? this.player.charge : 0;
+    this.crossEl.classList.toggle('drawing', ch > 0);
+    this.crossEl.classList.toggle('full', ch >= 1);
+    this.crossEl.style.setProperty('--p', ch.toFixed(3));
+    this.lockEl.classList.toggle('hidden', !locking);
+    if (locking && b) {
+      const v = this.tmpV.set(b.pos.x, 2.6, b.pos.z).project(this.camera);
+      if (v.z < 1) {
+        this.lockEl.style.left = `${(v.x * 0.5 + 0.5) * window.innerWidth}px`;
+        this.lockEl.style.top = `${(-v.y * 0.5 + 0.5) * window.innerHeight}px`;
+      } else {
+        this.lockEl.classList.add('hidden');
+      }
+    }
   }
 }
 

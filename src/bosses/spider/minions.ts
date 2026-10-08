@@ -39,6 +39,11 @@ export class Egg implements Minion {
   private hp: number = S.eggs.eggHp;
   private flash = 0;
   private pos = new V3();
+  /** 알 위에 뜨는 체력바 (착지한 뒤 보인다). 부화 전에 이걸 다 깎으면 새끼가 나오지 않는다 */
+  private bar = new THREE.Group();
+  private barBack: THREE.Mesh;
+  private barFill: THREE.Mesh;
+  private barMats: THREE.MeshBasicMaterial[] = [];
 
   constructor(
     private host: Host,
@@ -57,7 +62,32 @@ export class Egg implements Minion {
     this.ring = new THREE.Mesh(new THREE.RingGeometry(0.7, 0.85, 28).rotateX(-Math.PI / 2), this.ringMat);
     this.ring.position.set(to.x, 0.06, to.z);
     host.scene.add(this.ring);
+
+    // 체력바: 어두운 밑판 + 금색 채움 (왼쪽 기준으로 줄어든다). 다리/몸에 가려도 보이도록 깊이 검사를 끈다.
+    const W = 1.5;
+    const H = 0.17;
+    const mk = (color: number, op: number) => {
+      const m = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: op, depthTest: false, depthWrite: false, toneMapped: false });
+      this.barMats.push(m);
+      return m;
+    };
+    this.barBack = new THREE.Mesh(new THREE.PlaneGeometry(W + 0.1, H + 0.1), mk(0x120403, 0.85));
+    const fillMat = mk(0xffa62a, 1); // 블룸에 번져 흰색이 되지 않도록 밝기를 올리지 않는다
+    this.barFill = new THREE.Mesh(new THREE.PlaneGeometry(W, H).translate(W / 2, 0, 0.01), fillMat);
+    this.barFill.position.x = -W / 2;
+    this.barBack.renderOrder = 20;
+    this.barFill.renderOrder = 21;
+    this.bar.add(this.barBack, this.barFill);
+    this.bar.visible = false;
+    host.scene.add(this.bar);
   }
+
+  /** 맞은 만큼 체력바를 줄이고 숫자를 띄운다 */
+  private onHit(dmg: number) {
+    this.flash = 1;
+    this.host.floatText(this.tmpText.set(this.pos.x, 1.9, this.pos.z), String(Math.max(1, Math.round(dmg))), 'normal');
+  }
+  private tmpText = new V3();
 
   update(dt: number) {
     if (!this.alive) return;
@@ -84,6 +114,12 @@ export class Egg implements Minion {
     }
     // 앉아서 부화 대기: 점점 흔들리고 밝아진다
     this.sitT += dt;
+    this.bar.visible = true;
+    this.bar.position.set(this.pos.x, 1.7, this.pos.z);
+    this.bar.quaternion.copy(this.host.camera.quaternion);
+    // 가까이 있어도 화면을 가리지 않도록, 거리에 따라 크기를 보정한다
+    this.bar.scale.setScalar(Math.min(1.3, Math.max(0.42, this.host.camera.position.distanceTo(this.pos) / 18)));
+    this.barFill.scale.x = Math.max(0.001, this.hp / S.eggs.eggHp);
     const p = Math.min(1, this.sitT / E.hatch);
     this.flash = Math.max(0, this.flash - dt * 9);
     this.mesh.rotation.z = Math.sin(this.sitT * (6 + 26 * p)) * 0.1 * (0.3 + p);
@@ -106,9 +142,19 @@ export class Egg implements Minion {
 
   hitArrow(p: THREE.Vector3, r: number, dmg: number): number {
     if (!this.alive || this.state !== 'sit') return 0;
-    if (Math.hypot(p.x - this.pos.x, p.z - this.pos.z) > 0.8 + r) return 0;
+    if (Math.hypot(p.x - this.pos.x, p.z - this.pos.z) > 0.8 + r || p.y > 2.4) return 0;
     this.hp -= dmg;
-    this.flash = 1;
+    this.onHit(dmg);
+    this.host.sfx.hit(false);
+    if (this.hp <= 0) this.kill();
+    return dmg;
+  }
+
+  hitSplash(x: number, z: number, r: number, dmg: number): number {
+    if (!this.alive || this.state !== 'sit') return 0;
+    if (Math.hypot(x - this.pos.x, z - this.pos.z) > 0.8 + r) return 0;
+    this.hp -= dmg;
+    this.onHit(dmg);
     this.host.sfx.hit(false);
     if (this.hp <= 0) this.kill();
     return dmg;
@@ -142,6 +188,7 @@ export class Egg implements Minion {
   private remove() {
     this.host.scene.remove(this.mesh);
     this.host.scene.remove(this.ring);
+    this.host.scene.remove(this.bar);
     this.dispose();
   }
 
@@ -150,6 +197,9 @@ export class Egg implements Minion {
     this.mat.dispose();
     this.ring.geometry.dispose();
     this.ringMat.dispose();
+    this.barBack.geometry.dispose();
+    this.barFill.geometry.dispose();
+    for (const m of this.barMats) m.dispose();
   }
 }
 
@@ -214,7 +264,7 @@ export class Baby implements Minion {
 
   update(dt: number) {
     if (!this.alive) return;
-    const sp = S.baby.speed[Math.min(1, this.owner.phaseIndex)];
+    const sp = S.baby.speed[Math.min(2, this.owner.phaseIndex)];
     this.flash = Math.max(0, this.flash - dt * 9);
     this.mat.emissive.setRGB(0.17 + this.flash * 0.9, 0.05 + this.flash * 0.45, 0.03 + this.flash * 0.1);
 
@@ -288,10 +338,19 @@ export class Baby implements Minion {
 
   hitArrow(p: THREE.Vector3, r: number, dmg: number): number {
     if (!this.alive || this.born < 0.4) return 0;
-    if (Math.hypot(p.x - this.pos.x, p.z - this.pos.z) > S.baby.radius + r) return 0;
+    if (Math.hypot(p.x - this.pos.x, p.z - this.pos.z) > S.baby.radius + r || p.y > 2.4) return 0;
     this.hp -= dmg;
     this.flash = 1;
     this.host.sfx.hit(false);
+    if (this.hp <= 0) this.die(true);
+    return dmg;
+  }
+
+  hitSplash(x: number, z: number, r: number, dmg: number): number {
+    if (!this.alive || this.born < 0.4) return 0;
+    if (Math.hypot(x - this.pos.x, z - this.pos.z) > S.baby.radius + r) return 0;
+    this.hp -= dmg;
+    this.flash = 1;
     if (this.hp <= 0) this.die(true);
     return dmg;
   }

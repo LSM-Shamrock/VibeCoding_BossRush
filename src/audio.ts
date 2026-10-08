@@ -82,6 +82,148 @@ export class Sfx {
   dash() {
     this.noise(0.18, 0.12, 600, 3200, 'bandpass');
   }
+
+  /* ───────────── 불꽃 차징 (누르고 있는 동안 계속 나는 소리) ───────────── */
+  // 톤(오실레이터)을 쓰지 않는다 — 음정이 있으면 레이저/기계음처럼 들린다. 잡음을 필터로 깎은 '바람'만 쓴다.
+  private chg: {
+    src: AudioBufferSourceNode[];
+    lfo: OscillatorNode[];
+    wf: BiquadFilterNode;
+    lp: BiquadFilterNode;
+    wg: GainNode;
+    rg: GainNode;
+    timer: number;
+    level: number;
+    /** 다음 맥동을 낼 오디오 시각 */
+    next: number;
+    /** 완전히 모인 뒤인가 */
+    full: boolean;
+  } | null = null;
+
+  /** 차징 시작: 불꽃을 빨아들이는 바람 소리. 모일수록 바람이 밝아지고 조금 커지고, 가끔 불씨 튀는 소리가 섞인다. */
+  chargeStart() {
+    if (!this.ctx || !this.master || !this.noiseBuf || this.chg) return;
+    const c = this.ctx;
+    const mkNoise = () => {
+      const src = c.createBufferSource();
+      src.buffer = this.noiseBuf;
+      src.loop = true;
+      return src;
+    };
+    // ① 바람: 밴드패스 잡음. 중심 주파수가 서서히 오른다.
+    const wSrc = mkNoise();
+    const wf = c.createBiquadFilter();
+    wf.type = 'bandpass';
+    wf.frequency.value = 380;
+    wf.Q.value = 0.8;
+    const lp = c.createBiquadFilter(); // 쉭— 하는 고음을 깎아 바람답게
+    lp.type = 'lowpass';
+    lp.frequency.value = 1200;
+    lp.Q.value = 0.5;
+    const wg = c.createGain();
+    wg.gain.value = 0.0001;
+    wSrc.connect(wf).connect(lp).connect(wg).connect(this.master);
+    // ② 숨결: 낮은 대역만 통과시킨 잡음 (몸통 있는 공기 소리)
+    const rSrc = mkNoise();
+    const rf = c.createBiquadFilter();
+    rf.type = 'lowpass';
+    rf.frequency.value = 170;
+    rf.Q.value = 0.4;
+    const rg = c.createGain();
+    rg.gain.value = 0.0001;
+    rSrc.connect(rf).connect(rg).connect(this.master);
+    // ③ 바람이 일렁이도록 아주 느린 두 개의 흔들림 (세기, 음색). 박자가 느리고 불규칙해서 기계 떨림처럼 들리지 않는다.
+    const swell = c.createOscillator();
+    swell.frequency.value = 0.9;
+    const swellG = c.createGain();
+    swellG.gain.value = 0.009;
+    swell.connect(swellG).connect(wg.gain);
+    const gust = c.createOscillator();
+    gust.frequency.value = 0.37;
+    const gustG = c.createGain();
+    gustG.gain.value = 70;
+    gust.connect(gustG).connect(wf.frequency);
+    for (const n of [wSrc, rSrc]) n.start(0, Math.random() * 0.9);
+    swell.start();
+    gust.start();
+    // ④ 맥동 + 불씨 소리: 25ms 마다 앞을 내다보며 예약한다. 맥동 간격은 모일수록 빨라진다(두… 둥… 두둥둥둥둥).
+    const timer = window.setInterval(() => this.chargeTick(), 25);
+    this.chg = { src: [wSrc, rSrc], lfo: [swell, gust], wf, lp, wg, rg, timer, level: 0, next: c.currentTime, full: false };
+    this.chargeLevel(0);
+    this.chargeTick();
+  }
+
+  /** 맥동 간격: 처음 0.22초 → 가득 찰 때 0.06초 */
+  private pulseGap(k: number) {
+    return 0.22 * Math.pow(0.27, k);
+  }
+
+  private chargeTick() {
+    const n = this.chg;
+    if (!n || !this.ctx) return;
+    const now = this.ctx.currentTime;
+    // 맥동 하나 = 짧게 터지는 바람 한 줌(+ 초반엔 낮은 둥). 음정이 아니라 잡음이라 기계음처럼 들리지 않는다.
+    while (n.next < now + 0.06) {
+      const k = n.level;
+      const d = Math.max(0, n.next - now);
+      this.noise(0.1 + 0.05 * (1 - k), 0.11 + 0.05 * k, 480 + 900 * k, 1700 + 2500 * k, 'bandpass', d);
+      if (k < 0.8) this.tone(175 - 55 * k, 85, 0.11, 'sine', 0.09 * (1 - k), d);
+      n.next += this.pulseGap(k);
+    }
+    // 불씨 튀는 소리: 모일수록 촘촘해진다
+    const k = n.level;
+    if (Math.random() < 0.05 + 0.5 * k * k) this.noise(0.03, 0.006 + 0.012 * k, 2200 + Math.random() * 2600, 700, 'bandpass');
+  }
+
+  /** 차징 세기 0~1: 바람이 밝아지고(380 → 1500Hz) 조금씩 커진다 */
+  chargeLevel(level: number) {
+    if (!this.ctx || !this.chg) return;
+    const t = this.ctx.currentTime;
+    const n = this.chg;
+    const k = Math.max(0, Math.min(1, level));
+    n.level = k;
+    n.wf.frequency.setTargetAtTime(340 + 1000 * k * k, t, 0.08);
+    n.lp.frequency.setTargetAtTime(1000 + 1500 * k, t, 0.08);
+    const boost = n.full ? 0.03 : 0; // 가득 찬 뒤엔 바람이 한 단계 더 거세진다
+    n.wg.gain.setTargetAtTime(0.036 + 0.06 * k + boost, t, 0.08);
+    n.rg.gain.setTargetAtTime(0.042 + 0.06 * k + boost, t, 0.08);
+  }
+
+  /** 완전히 모였다는 신호: 딱 하는 균열음 + 훅 빨려 들어가는 바람 + 묵직한 저음 한 방 + 흩어지는 불씨. (모두 잡음/저음이라 음정이 없다) */
+  chargeFull() {
+    this.noise(0.06, 0.11, 3000, 9000, 'highpass');
+    this.noise(0.3, 0.14, 300, 2600, 'bandpass');
+    this.tone(150, 44, 0.4, 'sine', 0.2);
+    this.noise(0.55, 0.04, 6500, 2500, 'highpass', 0.05);
+    if (this.chg) {
+      this.chg.full = true;
+      this.chargeLevel(this.chg.level);
+    }
+  }
+
+  /** 발사/취소: 소리를 짧게 줄여서 끈다 */
+  chargeStop() {
+    if (!this.ctx || !this.chg) return;
+    const t = this.ctx.currentTime;
+    const n = this.chg;
+    this.chg = null;
+    window.clearInterval(n.timer);
+    for (const g of [n.wg, n.rg]) {
+      g.gain.cancelScheduledValues(t);
+      g.gain.setTargetAtTime(0.0001, t, 0.03);
+    }
+    window.setTimeout(() => {
+      n.src.forEach((x) => x.stop());
+      n.lfo.forEach((x) => x.stop());
+    }, 300);
+  }
+
+  /** 완전 차징 불꽃의 폭발 */
+  boom() {
+    this.noise(0.55, 0.3, 2800, 90, 'lowpass');
+    this.noise(0.3, 0.1, 5200, 1400, 'highpass');
+    this.tone(125, 38, 0.45, 'sine', 0.3);
+  }
   playerHit() {
     this.tone(160, 50, 0.3, 'sawtooth', 0.22);
     this.noise(0.22, 0.18, 1400, 200);

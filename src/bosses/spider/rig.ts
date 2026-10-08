@@ -73,8 +73,8 @@ export class SpiderRig {
   yaw = 0;
 
   /** 판정용 원 (월드 XZ) */
-  readonly thorax = { x: 0, z: 0, r: S.thoraxR };
-  readonly abdomenC = { x: 0, z: 0, r: S.abdomenR };
+  readonly thorax = { x: 0, y: 2, z: 0, r: S.thoraxR };
+  readonly abdomenC = { x: 0, y: 2, z: 0, r: S.abdomenR };
 
   private body = new THREE.Group();
   private abdPivot = new THREE.Group();
@@ -107,6 +107,7 @@ export class SpiderRig {
   private eyeMats: THREE.MeshBasicMaterial[] = [];
   private sacMat = new THREE.MeshBasicMaterial({ color: 0xffa020, toneMapped: false });
   private rage = false;
+  private rageLevel = 1;
   private exposed = false;
 
   private gaitPhase = 0;
@@ -267,8 +268,10 @@ export class SpiderRig {
     this.pose.snap({ ...IDLE, ...POSES[name] });
   }
 
-  setRage(on: boolean) {
+  /** level: 1 = 분노(페이즈 2), 2 = 광란(페이즈 3) — 눈이 더 빠르게 번쩍인다 */
+  setRage(on: boolean, level = 1) {
     this.rage = on;
+    this.rageLevel = level;
   }
   setExposed(on: boolean) {
     this.exposed = on;
@@ -307,6 +310,16 @@ export class SpiderRig {
       if (distPointSegment(p, this.segHip[i], this.segKnee[i]) < rr) return i;
     }
     return -1;
+  }
+
+  /** 바닥 위 (x,z) 원이 다리(발/무릎)에 닿는지 — 불꽃 장판/스플래시용 */
+  legTouch(x: number, z: number, r: number): boolean {
+    const rr = r + S.legBlockR;
+    for (let i = 0; i < LEG_COUNT; i++) {
+      if (Math.hypot(this.segEnd[i].x - x, this.segEnd[i].z - z) < rr) return true;
+      if (Math.hypot(this.segKnee[i].x - x, this.segKnee[i].z - z) < rr) return true;
+    }
+    return false;
   }
 
   /** 착지/기상: 모든 발을 지정한 반경으로 동시에 내딛는다 */
@@ -371,8 +384,11 @@ export class SpiderRig {
     const cy = Math.cos(this.yaw);
     this.thorax.x = this.pos.x + sy * 0.45;
     this.thorax.z = this.pos.z + cy * 0.45;
+    this.body.getWorldPosition(this.tmp);
+    this.thorax.y = this.tmp.y;
     this.abdomen.getWorldPosition(this.tmp);
     this.abdomenC.x = this.tmp.x;
+    this.abdomenC.y = this.tmp.y;
     this.abdomenC.z = this.tmp.z;
   }
 
@@ -452,14 +468,14 @@ export class SpiderRig {
       this.kneeMats[i].emissive.setRGB(0.16 + this.legFlash[i] * 0.7, 0.09 + this.legFlash[i] * 0.4, 0.02 + this.legFlash[i] * 0.1);
     }
     // 눈: 평소엔 황금색, 분노하면 붉게 / 약점 주머니: 후딜엔 금색으로 크게 깜빡
-    const k = 1.3 + 0.4 * Math.sin(this.t * (this.rage ? 11 : 4));
+    const k = 1.3 + 0.4 * Math.sin(this.t * (this.rage ? (this.rageLevel >= 2 ? 17 : 11) : 4));
     if (this.rage) this.eyeMats[0].color.setRGB(1.0 * k, 0.12 * k, 0.08 * k);
     else this.eyeMats[0].color.setRGB(1.0 * k, 0.78 * k, 0.12 * k);
     if (this.exposed) {
       const q = 1.5 + 0.9 * Math.sin(this.t * 16);
       this.sacMat.color.setRGB(1.0 * q, 0.8 * q, 0.15 * q);
     } else {
-      const q = 0.95 + 0.3 * Math.sin(this.t * (this.rage ? 8 : 3.2));
+      const q = 0.95 + 0.3 * Math.sin(this.t * (this.rage ? (this.rageLevel >= 2 ? 13 : 8) : 3.2));
       this.sacMat.color.setRGB(1.0 * q, 0.5 * q, 0.06 * q);
     }
   }

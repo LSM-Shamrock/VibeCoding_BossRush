@@ -10,8 +10,13 @@ export class Input {
   readonly pressed = new Set<string>();
   readonly mouseNDC = new THREE.Vector2();
   mouseDown = false;
+  /** 마우스 이동량 누적 (포인터 락 상태에서 시점 회전에 사용) */
+  lookDX = 0;
+  lookDY = 0;
+  private el: HTMLElement;
 
   constructor(el: HTMLElement, private binds: Keybinds) {
+    this.el = el;
     window.addEventListener('keydown', (e) => {
       if (!e.ctrlKey && !e.metaKey && !e.altKey && (ALWAYS_PREVENT.has(e.code) || this.binds.isBound(e.code))) e.preventDefault();
       if (!e.repeat) this.pressed.add(e.code);
@@ -22,10 +27,20 @@ export class Input {
       this.keys.clear();
       this.mouseDown = false;
     });
-    el.addEventListener('pointermove', (e) => this.setMouse(e));
+    el.addEventListener('pointermove', (e) => {
+      this.setMouse(e);
+      if (document.pointerLockElement === el) {
+        this.lookDX += e.movementX;
+        this.lookDY += e.movementY;
+      }
+    });
     el.addEventListener('pointerdown', (e) => {
       this.setMouse(e);
       if (e.button === 0) this.mouseDown = true;
+      if (e.button === 1) {
+        e.preventDefault();
+        this.pressed.add('MouseMiddle');
+      }
     });
     window.addEventListener('pointerup', (e) => {
       if (e.button === 0) this.mouseDown = false;
@@ -53,6 +68,15 @@ export class Input {
   tapped(action: ActionId) {
     for (const k of this.binds.keys(action)) if (this.pressed.has(k)) return true;
     return false;
+  }
+  /** 쌓인 마우스 이동량을 꺼내고 비운다 */
+  takeLook(out: { x: number; y: number }) {
+    out.x = this.lookDX;
+    out.y = this.lookDY;
+    this.lookDX = this.lookDY = 0;
+  }
+  get locked() {
+    return document.pointerLockElement === this.el;
   }
   endFrame() {
     this.pressed.clear();

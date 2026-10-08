@@ -29,8 +29,9 @@ export class KeyPanel {
     const fixed = document.createElement('div');
     fixed.className = 'kp-fixed';
     fixed.innerHTML = `
-      <div><span>조준</span><b>마우스</b></div>
-      <div><span>사격</span><b>자동 (끄면 마우스 왼쪽 버튼)</b></div>
+      <div><span>시점 회전 / 조준</span><b>마우스 (화면 중앙 조준점)</b></div>
+      <div><span>락온</span><b>마우스 휠 클릭</b></div>
+      <div><span>불꽃 쏘기</span><b>마우스 왼쪽 버튼을 누르고 있으면 불꽃이 모이고, 떼면 조준점으로 발사 (끝까지 모으면 맞은 곳에서 폭발해 주변 적에게 같은 피해)</b></div>
       <div><span>일시정지</span><b>Esc</b></div>
       <div><span>확인 / 계속</span><b>Enter · 클릭</b></div>`;
 
@@ -39,8 +40,8 @@ export class KeyPanel {
     dbg.innerHTML = `
       <summary>개발용 디버그 키 (바꿀 수 없음)</summary>
       <div><b>1</b> 무적 · <b>2</b> 체력 -1 · <b>3</b> 체력 +1 · <b>4</b> 특수 게이지 충전</div>
-      <div><b>5</b> 보스 공격 켜기/끄기 · <b>6</b> 보스 재시작 · <b>7</b> 페이즈 2로 · <b>8</b> 보스 체력 5%</div>
-      <div><b>9</b> 다음 공격 강제 (거미줄→점프→탄막→알→연속점프) · <b>\`</b> 디버그 표시</div>`;
+      <div><b>5</b> 보스 공격 켜기/끄기 · <b>6</b> 보스 재시작 · <b>7</b> 다음 페이즈로 · <b>8</b> 보스 체력 5%</div>
+      <div><b>9</b> 다음 공격 강제 (거미줄→점프→탄막→알→연속점프→거미줄 장판) · <b>\`</b> 디버그 표시</div>`;
 
     body.append(this.grid, fixed, dbg);
     this.el.append(top, body);

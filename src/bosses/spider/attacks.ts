@@ -5,8 +5,8 @@ import type { Spider } from './spider';
 const V3 = THREE.Vector3;
 const S = CFG.spider;
 
-export type AttackName = 'web' | 'pounce' | 'triple' | 'barrage' | 'eggs' | 'stagger' | 'roar';
-export const SEQUENCE_ATTACKS: AttackName[] = ['web', 'pounce', 'barrage', 'eggs', 'triple'];
+export type AttackName = 'web' | 'pounce' | 'triple' | 'barrage' | 'eggs' | 'webtrap' | 'stagger' | 'roar';
+export const SEQUENCE_ATTACKS: AttackName[] = ['web', 'pounce', 'barrage', 'eggs', 'triple', 'webtrap'];
 
 export interface Step {
   at: number;
@@ -37,11 +37,13 @@ export function buildAttack(name: AttackName, s: Spider): AttackScript {
     case 'pounce':
       return jumps(s, { n: 1, crouch: S.pounce.crouch * s.tempo, flight: S.pounce.flight, radius: S.pounce.radius, gap: 0, recover: S.pounce.recover[s.phaseIndex], peak: S.pounce.peak });
     case 'triple':
-      return jumps(s, { n: S.triple.count, crouch: S.triple.crouch, flight: S.triple.flight, radius: S.triple.radius, gap: S.triple.gap, recover: S.triple.recover, peak: S.triple.peak });
+      return jumps(s, { n: S.triple.count[s.phaseIndex], crouch: S.triple.crouch, flight: S.triple.flight, radius: S.triple.radius, gap: S.triple.gap, recover: S.triple.recover[s.phaseIndex], peak: S.triple.peak });
     case 'barrage':
       return barrage(s);
     case 'eggs':
       return eggs(s);
+    case 'webtrap':
+      return webtrap(s);
     case 'stagger':
       return stagger(s);
     case 'roar':
@@ -55,7 +57,8 @@ export function buildAttack(name: AttackName, s: Spider): AttackScript {
  */
 function web(s: Spider): AttackScript {
   const o = S.web;
-  const wind = o.windup * s.tempo;
+  const ph = s.phaseIndex;
+  const wind = o.windup[ph];
   const steps: Step[] = [];
   const origin = new V3();
   let angles: number[] = [];
@@ -76,27 +79,29 @@ function web(s: Spider): AttackScript {
       s.faceMode = 'hold';
       s.rig.mouth(origin);
       const base = Math.atan2(s.player.pos.z - origin.z, s.player.pos.x - origin.x);
-      const offs = s.phaseIndex === 0 ? [0] : [-o.fanAngle, 0, o.fanAngle];
+      const offs = ph === 0 ? [0] : [-o.fanAngle[ph], 0, o.fanAngle[ph]];
       angles = offs.map((d) => base + d);
-      for (const a of angles) s.host.fx.telegraphs.line(origin.x, origin.z, a, 26, o.lineW, wind * 0.7, () => {});
+      for (const a of angles) s.host.fx.telegraphs.line(origin.x, origin.z, a, 26, o.lineW, wind * 0.7 + (o.volleys[ph] - 1) * o.volleyGap, () => {});
     },
   });
-  steps.push({
-    at: wind,
-    fn: () => {
-      for (const a of angles) {
-        s.projectiles.spawn(origin.x, origin.z, Math.cos(a), Math.sin(a), o.speed, o.radius, 1.3, {
-          kind: 'web',
-          onHit: () => s.player.slow(o.slow),
-        });
-      }
-      s.host.sfx.web();
-      s.host.shake(0.25);
-      s.host.fx.particles.burst(new V3(origin.x, 1.3, origin.z), 0xf3e6c8, 16, 7, 0.4, 0.1, 0.2);
-      s.setPose('idle', 6);
-    },
-  });
-  return { steps, end: wind + o.recover };
+  for (let v = 0; v < o.volleys[ph]; v++) {
+    steps.push({
+      at: wind + v * o.volleyGap,
+      fn: () => {
+        for (const a of angles) {
+          s.projectiles.spawn(origin.x, origin.z, Math.cos(a), Math.sin(a), o.speed[ph], o.radius, 1.3, {
+            kind: 'web',
+            onHit: () => s.player.slow(o.slow),
+          });
+        }
+        s.host.sfx.web();
+        s.host.shake(0.25);
+        s.host.fx.particles.burst(new V3(origin.x, 1.3, origin.z), 0xf3e6c8, 16, 7, 0.4, 0.1, 0.2);
+        s.setPose('idle', 6);
+      },
+    });
+  }
+  return { steps, end: wind + (o.volleys[ph] - 1) * o.volleyGap + o.recover };
 }
 
 /* ───────────────────────── 점프 덮치기 / 연속 점프 ─────────────────────────
@@ -194,7 +199,7 @@ function land(s: Spider, to: THREE.Vector3, radius: number, last: boolean) {
 function barrage(s: Spider): AttackScript {
   const o = S.barrage;
   const ph = s.phaseIndex;
-  const wind = o.windup * s.tempo;
+  const wind = o.windup[ph];
   const steps: Step[] = [];
   const origin = new V3();
   let aim = 0;
@@ -228,7 +233,7 @@ function barrage(s: Spider): AttackScript {
       fn: () => {
         for (let j = 0; j < n; j++) {
           const a = aim - spread / 2 + (j + 0.5 * (v % 2)) * (spread / (n - 1));
-          s.projectiles.spawn(origin.x, origin.z, Math.cos(a), Math.sin(a), o.speed, o.radius, 1.7, { kind: 'poison' });
+          s.projectiles.spawn(origin.x, origin.z, Math.cos(a), Math.sin(a), o.speed[ph], o.radius, 1.7, { kind: 'poison' });
         }
         s.host.sfx.spit();
         s.host.shake(0.3);
@@ -244,7 +249,67 @@ function barrage(s: Spider): AttackScript {
       s.setExposed(true);
     },
   });
-  return { steps, end: tAfter + o.recover };
+  return { steps, end: tAfter + o.recover[ph] };
+}
+
+/* ───────────────────────── 거미줄 장판 ─────────────────────────
+ * 예비동작: 앞다리를 들고 몸을 젖힘 (거미줄 발사와 같은 자세)
+ * 공격: 거미줄 덩어리 여러 개를 포물선으로 던진다. 날아가는 동안 착지 지점에 고리가 표시된다.
+ *       1번은 플레이어가 선 자리, 2번은 가던 방향의 앞쪽, 나머지는 주변 — 가만히 있거나 직진만 하면 갇힌다.
+ * 결과: 착지한 자리에 끈끈한 장판이 남는다 (위에 서 있으면 느려짐, 데미지 없음)
+ */
+function webtrap(s: Spider): AttackScript {
+  const o = S.trap;
+  const ph = s.phaseIndex;
+  const wind = o.windup[ph];
+  const n = o.count[ph];
+  const steps: Step[] = [];
+  const from = new V3();
+  steps.push({
+    at: 0,
+    fn: () => {
+      s.setPose('webWind', 7);
+      s.faceMode = 'track';
+      s.faceRate = 4;
+      s.host.sfx.telegraph();
+    },
+  });
+  steps.push({ at: wind * 0.6, fn: () => (s.faceMode = 'hold') });
+  for (let i = 0; i < n; i++) {
+    steps.push({
+      at: wind + i * o.gap,
+      fn: () => {
+        s.rig.mouth(from);
+        const pl = s.player;
+        const to = new V3(pl.pos.x, 0, pl.pos.z);
+        if (i === 1) {
+          to.x += pl.vel.x * o.flight;
+          to.z += pl.vel.z * o.flight;
+          // 가만히 서 있으면 1번과 같은 자리에 겹치므로, 최소한 장판 반지름만큼은 벗어난 곳에 놓는다
+          const dx = to.x - pl.pos.x, dz = to.z - pl.pos.z;
+          const dl = Math.hypot(dx, dz);
+          const minD = o.radius * 1.5;
+          if (dl < minD) {
+            const a = dl > 0.01 ? Math.atan2(dz, dx) : Math.random() * Math.PI * 2;
+            to.x = pl.pos.x + Math.cos(a) * minD;
+            to.z = pl.pos.z + Math.sin(a) * minD;
+          }
+        } else if (i >= 2) {
+          const a = Math.random() * Math.PI * 2;
+          const d = 3.5 + Math.random() * 2.5;
+          to.x += Math.cos(a) * d;
+          to.z += Math.sin(a) * d;
+        }
+        arenaClamp(to, 1.5);
+        s.zones.launch(from, to, o.flight, o.peak, o.radius, o.life[ph]);
+        s.host.sfx.web();
+        s.host.shake(0.15);
+        s.host.fx.particles.burst(new V3(from.x, 1.3, from.z), 0xf3e6c8, 8, 6, 0.35, 0.1, 0.2);
+        if (i === n - 1) s.setPose('idle', 6);
+      },
+    });
+  }
+  return { steps, end: wind + (n - 1) * o.gap + o.recover };
 }
 
 /* ───────────────────────── 알 투척 (페이즈 2) ─────────────────────────
@@ -315,7 +380,7 @@ function roar(s: Spider): AttackScript {
       {
         at: 0,
         fn: () => {
-          s.beginPhase2();
+          s.beginNextPhase();
           s.faceMode = 'track';
           s.faceRate = 3;
           s.setPose('rear', 5);
@@ -326,8 +391,9 @@ function roar(s: Spider): AttackScript {
       {
         at: 0.35,
         fn: () => {
-          s.rig.setRage(true);
-          s.host.banner('분노', '동굴 여왕 거미가 격노했다', 2.0);
+          s.rig.setRage(true, s.phaseIndex);
+          if (s.phaseIndex >= 2) s.host.banner('광란', '여왕이 이성을 잃었다 — 공격이 더욱 거세진다', 2.2);
+          else s.host.banner('분노', '동굴 여왕 거미가 격노했다', 2.0);
         },
       },
       {

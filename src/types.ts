@@ -8,7 +8,7 @@ export interface Circle {
   r: number;
 }
 
-/** 화살 판정 결과: 0 = 빗나감(화살은 계속 날아감), 양수 = 준 데미지, BLOCKED = 막힘(화살만 사라짐, 데미지 없음) */
+/** 불꽃 판정 결과: 0 = 빗나감(불꽃은 계속 날아감), 양수 = 준 데미지, BLOCKED = 막힘(불꽃만 꺼짐, 데미지 없음 — 포효 중 무적 등) */
 export const BLOCKED = -1;
 
 /** 플레이어 공격을 받는 대상(보스, 알, 새끼, 분신 등) */
@@ -17,6 +17,8 @@ export interface Target {
   hitArrow(p: THREE.Vector3, r: number, dmg: number): number;
   /** 범위 공격(특수기) 판정 */
   hitRadial(c: THREE.Vector3, radius: number, dmg: number): void;
+  /** 불꽃 범위 피해(풀차징 스플래시 / 불꽃 장판). 바닥 위 (x,z) 원과 겹치면 피해를 주고 준 피해를 돌려준다 (겹치지 않으면 0) */
+  hitSplash(x: number, z: number, r: number, dmg: number): number;
   /** 플레이어가 통과하지 못하는 몸통 원들 (없으면 빈 배열) */
   bodies(): Circle[];
 }
@@ -34,13 +36,18 @@ export interface BossInfo {
 
 export type FloatKind = 'normal' | 'weak' | 'exposed' | 'special' | 'player';
 
+
 /** 게임 본체가 플레이어/보스/이펙트에 제공하는 공용 기능 */
 export interface Host {
   readonly scene: THREE.Scene;
+  /** 게임 카메라 (카메라를 향하는 이펙트용) */
+  readonly camera: THREE.Camera;
   readonly fx: Fx;
   readonly sfx: Sfx;
   targets: Target[];
   shake(amount: number): void;
+  /** 시야각을 순간적으로 deg 만큼 벌렸다가 되돌린다 (대시의 속도감) */
+  punch(deg: number): void;
   hitStop(seconds: number): void;
   /** 일정 시간 동안 시간 배율을 낮춘다 (연출용 슬로모션) */
   slowmo(scale: number, seconds: number): void;

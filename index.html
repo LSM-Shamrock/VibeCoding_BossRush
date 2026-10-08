@@ -25,6 +25,24 @@
       body::after { content: ""; position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 52%, rgba(14, 5, 2, 0.6) 100%); }
       #c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: none; outline: none; }
       #hud { position: fixed; inset: 0; pointer-events: none; }
+      /* 화면 중앙 조준점 / 락온 표식 */
+      #cross { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
+      #cross i { position: absolute; left: -9px; top: -9px; width: 18px; height: 18px; border: 1.5px solid rgba(255,214,140,.85); border-radius: 50%; box-shadow: 0 0 6px rgba(255,170,70,.55), inset 0 0 4px rgba(0,0,0,.4); }
+      #cross i::after { content: ""; position: absolute; left: 50%; top: 50%; width: 3px; height: 3px; margin: -1.5px 0 0 -1.5px; border-radius: 50%; background: #ffd27a; }
+      #lockon { position: absolute; width: 0; height: 0; }
+      #lockon i { position: absolute; left: -17px; top: -17px; width: 34px; height: 34px; border: 2px solid #ffcf6e; transform: rotate(45deg); box-shadow: 0 0 10px rgba(255,170,70,.7), inset 0 0 8px rgba(255,120,40,.25); animation: lockpulse 1s infinite alternate; }
+      @keyframes lockpulse { from { opacity: .65; transform: rotate(45deg) scale(.92); } to { opacity: 1; transform: rotate(45deg) scale(1.06); } }
+      /* 불꽃 차징 링: 누르고 있는 동안 채워지고, 가득 차면 밝게 번쩍인다 */
+      #cross b { position: absolute; left: -19px; top: -19px; width: 38px; height: 38px; border-radius: 50%; opacity: 0;
+        background: conic-gradient(from 0deg, rgba(255,214,140,.95) calc(var(--p, 0) * 1turn), rgba(255,255,255,0) 0);
+        -webkit-mask: radial-gradient(circle, transparent 15px, #000 16px, #000 19px, transparent 19.5px);
+        mask: radial-gradient(circle, transparent 15px, #000 16px, #000 19px, transparent 19.5px); }
+      #cross.drawing b { opacity: 1; }
+      #cross.drawing i { transform: scale(.78); transition: transform .08s; }
+      #cross.full b { background: conic-gradient(#fff3c8 0 1turn); filter: drop-shadow(0 0 7px #ffb347); animation: fullpulse .35s ease-in-out infinite alternate; }
+      #cross.full i { border-color: #fff3c8; box-shadow: 0 0 10px rgba(255,200,110,.9); }
+      @keyframes fullpulse { from { opacity: .7; } to { opacity: 1; } }
+      #cross.hidden, #lockon.hidden { display: none; }
       .hidden { display: none !important; }
 
       /* 보스 체력바 */
@@ -41,10 +59,32 @@
       @keyframes blink { from { opacity: .55; } to { opacity: 1; } }
 
       /* 좌하단: 등불(체력) / 대시 / 특수 */
-      #bl { position: absolute; left: 22px; bottom: 22px; background: var(--panel); border: 1px solid var(--edge); border-radius: 6px; padding: 12px 14px 10px; width: 250px; backdrop-filter: blur(3px); box-shadow: inset 0 0 0 3px rgba(10,3,1,.35); }
-      #lamps { display: flex; gap: 9px; margin-bottom: 10px; }
-      .lamp { width: 24px; height: 24px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #fff7de, var(--lamp) 45%, #c4701c); box-shadow: 0 0 12px 3px rgba(255,160,60,.6); transition: all .25s; }
-      .lamp.off { background: #2a1810; box-shadow: none; opacity: .55; }
+      #bl { position: absolute; left: 22px; bottom: 22px; background: var(--panel); border: 1px solid var(--edge); border-radius: 6px; padding: 12px 14px 10px; width: max-content; backdrop-filter: blur(3px); box-shadow: inset 0 0 0 3px rgba(10,3,1,.35); }
+      #lamps { display: flex; gap: 8px; margin-bottom: 8px; }
+      /* 체력(불꽃): 켜진 칸은 일렁이며 타오르고, 꺼진 칸은 점선 윤곽만 남은 빈 불꽃 */
+      .lamp { position: relative; width: 30px; height: 38px; }
+      .lamp svg { display: block; width: 100%; height: 100%; overflow: visible; transform-origin: 50% 100%; filter: drop-shadow(0 0 6px rgba(255,140,40,.8)); }
+      .lamp .fo { fill: url(#gFlameO); stroke: rgba(255,232,180,.9); stroke-width: 1; stroke-linejoin: round; }
+      .lamp .fi { fill: url(#gFlameI); }
+      .lamp.off svg { filter: none; animation: none; }
+      .lamp.off .fo { fill: rgba(28,20,15,.88); stroke: #b3a28a; stroke-width: 1.5; stroke-dasharray: 2.6 2.2; }
+      .lamp.off .fi { display: none; }
+      /* 방금 꺼진 칸: 크게 부풀며 붉게 번쩍이고 사그라든다 */
+      .lamp.hit svg { animation: flamehit .6s ease-out; }
+      .lamp.hit .fo { animation: fohit .6s ease-out; }
+      @keyframes flamehit { 0% { transform: scale(1.55, 1.35); filter: drop-shadow(0 0 9px rgba(255,50,30,1)) drop-shadow(0 0 18px rgba(255,50,30,.8)); } 100% { transform: scale(1); filter: none; } }
+      @keyframes fohit { 0% { fill: #ff3b26; stroke: #fff1ea; } }
+
+      /* 화면 가장자리 붉은 연출: 맞은 순간 번쩍(#hurt) + 체력이 1~2칸일 때 계속 맥동(#lowhp) */
+      #hurt, #lowhp { position: absolute; inset: 0; pointer-events: none; opacity: 0; }
+      #hurt { background: radial-gradient(ellipse at center, rgba(255,40,20,0) 34%, rgba(205,20,10,.55) 68%, rgba(120,0,0,.95) 100%); }
+      #hurt::after { content: ""; position: absolute; inset: 0; background: rgba(255,45,28,.22); }
+      #hurt.on { animation: hurt .8s ease-out; }
+      @keyframes hurt { 0% { opacity: 1; } 100% { opacity: 0; } }
+      #lowhp { background: radial-gradient(ellipse at center, transparent 50%, rgba(190,20,10,.5) 100%); }
+      #lowhp.on { animation: lowpulse 1.5s ease-in-out infinite alternate; }
+      #lowhp.crit { background: radial-gradient(ellipse at center, transparent 38%, rgba(215,15,8,.7) 100%); animation-duration: .7s; }
+      @keyframes lowpulse { from { opacity: .3; } to { opacity: 1; } }
       .row { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12px; color: var(--dim); }
       .row .lbl { width: 78px; }
       kbd { font: inherit; font-size: 10px; padding: 1px 5px; border: 1px solid rgba(255,215,150,.4); border-radius: 3px; color: var(--ink); }
@@ -66,9 +106,15 @@
       /* 데미지 숫자 */
       #dmglayer { position: absolute; inset: 0; overflow: hidden; }
       .dmg { position: absolute; transform: translate(-50%, -50%); font-weight: 800; font-size: 18px; color: #fff4dc; text-shadow: 0 0 6px rgba(0,0,0,.9), 0 1px 2px #000; animation: floatUp .8s ease-out forwards; white-space: nowrap; }
-      .dmg.weak { color: #ffb347; font-size: 24px; }
-      .dmg.exposed { color: var(--gold); font-size: 30px; }
-      .dmg.special { color: #fff0b8; font-size: 38px; text-shadow: 0 0 12px rgba(255,150,40,.9), 0 1px 2px #000; }
+      .dmg.weak { font-size: 24px; }
+      .dmg.exposed { font-size: 30px; }
+      .dmg.special { font-size: 38px; }
+      /* 색은 숫자(피해량)에 따라: 작게 → 상아, 중간 → 주황빛 호박색, 크게 → 주황, 아주 크게 → 붉은색 */
+      .dmg.t2 { color: #ffb04a; }
+      .dmg.t3 { color: #ff7426; text-shadow: 0 0 9px rgba(255,90,20,.65), 0 1px 2px #000; }
+      .dmg.t3.normal { font-size: 22px; }
+      .dmg.t4 { color: #ff3b2e; text-shadow: 0 0 13px rgba(255,40,20,.85), 0 0 3px rgba(80,0,0,.9), 0 1px 2px #000; }
+      .dmg.t4.normal { font-size: 27px; }
       .dmg.player { color: var(--danger); font-size: 28px; }
       @keyframes floatUp { 0% { opacity: 0; transform: translate(-50%, -30%) scale(.7); } 15% { opacity: 1; transform: translate(-50%, -60%) scale(1.1); } 100% { opacity: 0; transform: translate(-50%, -190%) scale(1); } }
 
@@ -126,7 +172,17 @@
   <body>
     <canvas id="c" tabindex="0"></canvas>
 
+    <!-- 체력 불꽃 아이콘용 그라데이션 (화면에는 보이지 않음) -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+      <defs>
+        <linearGradient id="gFlameO" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd978"/><stop offset=".5" stop-color="#ff9a2e"/><stop offset="1" stop-color="#e2561b"/></linearGradient>
+        <linearGradient id="gFlameI" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fffbe8"/><stop offset="1" stop-color="#ffd25a"/></linearGradient>
+      </defs>
+    </svg>
+
     <div id="hud">
+      <div id="lowhp"></div>
+      <div id="hurt"></div>
       <div id="bossbar" class="hidden">
         <div id="bossname"></div>
         <div id="bosstrack"><div id="bosschip"></div><div id="bossfill"></div><div id="bossmarks"></div></div>
@@ -140,13 +196,15 @@
 
       <div id="banner"><div class="bt" id="bt"></div><div class="bs" id="bs"></div></div>
       <div id="debuff" class="hidden">거미줄에 걸렸다! <kbd id="kdebuff">Space</kbd> 대시로 끊어내기</div>
+      <div id="cross" class="hidden"><i></i><b></b></div>
+      <div id="lockon" class="hidden"><i></i></div>
       <div id="toast"></div>
       <div id="dmglayer"></div>
 
       <div id="bl">
         <div id="lamps"></div>
         <div class="row"><span class="lbl">대시 <kbd id="kdash">Space</kbd></span><div class="mini"><div id="dashfill"></div></div></div>
-        <div class="row" id="spwrap"><span class="lbl">특수 <kbd id="kspecial">Q</kbd></span><div class="mini"><div id="spfill"></div></div></div>
+        <div class="row" id="spwrap"><span class="lbl">특수 <kbd id="kspecial">Shift</kbd></span><div class="mini"><div id="spfill"></div></div></div>
       </div>
     </div>
 

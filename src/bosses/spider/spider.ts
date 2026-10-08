@@ -6,9 +6,12 @@ import type { Player } from '../../player';
 import { SpiderRig, type PoseName } from './rig';
 import { buildAttack, type AttackName, type AttackScript } from './attacks';
 import { Baby, Egg, type Minion, type MinionOwner } from './minions';
+import { WebZones } from './webzone';
 
 const V3 = THREE.Vector3;
 const S = CFG.spider;
+/** 화살 높이 판정 여유: 몸통/배 중심 높이 ± (반경 + 이 값) 안이면 맞는다 */
+const HIT_PAD = 0.5;
 
 const wrapPi = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 const yawOf = (dx: number, dz: number) => Math.atan2(dx, dz);
@@ -35,7 +38,9 @@ interface Jump {
 export class Spider implements Target, BossInfo, MinionOwner {
   readonly rig: SpiderRig;
   readonly projectiles: Projectiles;
-  readonly phaseMarks = [S.phase2At];
+  /** 거미줄 장판 (거미줄 장판 공격이 남기는 끈끈한 바닥) */
+  readonly zones: WebZones;
+  readonly phaseMarks: number[] = [...S.phaseAt];
   readonly maxHp: number = S.maxHp;
 
   hp: number = S.maxHp;
@@ -87,13 +92,14 @@ export class Spider implements Target, BossInfo, MinionOwner {
   ) {
     this.rig = new SpiderRig(host.scene);
     this.projectiles = new Projectiles(host, player, 120);
+    this.zones = new WebZones(host, player);
     host.targets.push(this);
     this.intro(drop);
   }
 
   /* ───────────────────────── 접근자 ───────────────────────── */
   get name() {
-    return this.phaseIndex ? `${S.name} · 분노` : S.name;
+    return this.phaseIndex === 0 ? S.name : `${S.name} · ${this.phaseIndex === 1 ? '분노' : '광란'}`;
   }
   get pos() {
     return this.rig.pos;
@@ -186,6 +192,7 @@ export class Spider implements Target, BossInfo, MinionOwner {
   update(dt: number) {
     this.t += dt;
     this.projectiles.update(dt);
+    this.zones.update(dt);
     for (const m of [...this.minions]) m.update(dt);
 
     if (this.state === 'dead') {
@@ -382,12 +389,17 @@ export class Spider implements Target, BossInfo, MinionOwner {
   }
 
   /* ───────────────────────── 페이즈 ───────────────────────── */
-  /** 포효 시작 시 호출 (attacks.ts) */
-  beginPhase2() {
-    this.phaseIndex = 1;
+  /** 포효 시작 시 호출 (attacks.ts): 페이즈 2 → 3 순으로 올라간다 */
+  beginNextPhase() {
+    this.phaseIndex = Math.min(S.phaseAt.length, this.phaseIndex + 1);
     this.seqIdx = 0;
     this.invulnerable = true;
-    this.host.sfx.drone(true, 1);
+    this.host.sfx.drone(true, this.phaseIndex >= 2 ? 1 : 0.5);
+  }
+
+  /** 지금 페이즈에서 다음 페이즈로 넘어가는 체력 비율 (마지막 페이즈면 undefined) */
+  private nextPhaseAt(): number | undefined {
+    return (S.phaseAt as readonly number[])[this.phaseIndex];
   }
 
   /* ───────────────────────── 판정 (Target) ───────────────────────── */
@@ -399,19 +411,22 @@ export class Spider implements Target, BossInfo, MinionOwner {
   hitArrow(p: THREE.Vector3, r: number, dmg: number): number {
     if (!this.alive || this.airborne) return 0;
 
-    // 1) 발끝이 화살을 막는다
+    // 1) 다리: 맞으면 피해를 입는다 (몸통과 같은 배율 S.legMult). 포효 중 무적일 때만 튕겨낸다.
     const leg = this.rig.legBlock(p, r);
     if (leg >= 0) {
       this.rig.flashLeg(leg);
-      this.blockSfx();
-      return BLOCKED;
+      if (this.invulnerable) {
+        this.blockSfx();
+        return BLOCKED;
+      }
+      return this.damage(dmg * S.legMult, 'leg');
     }
 
     // 2) 몸통 / 배
     const th = this.rig.thorax;
     const ab = this.rig.abdomenC;
-    const inT = Math.hypot(p.x - th.x, p.z - th.z) < th.r + r;
-    const inA = Math.hypot(p.x - ab.x, p.z - ab.z) < ab.r + r;
+    const inT = Math.hypot(p.x - th.x, p.z - th.z) < th.r + r && Math.abs(p.y - th.y) < th.r + HIT_PAD;
+    const inA = Math.hypot(p.x - ab.x, p.z - ab.z) < ab.r + r && Math.abs(p.y - ab.y) < ab.r + HIT_PAD;
     if (!inT && !inA) return 0;
     if (this.invulnerable) {
       this.blockSfx();
@@ -430,6 +445,15 @@ export class Spider implements Target, BossInfo, MinionOwner {
     if (Math.hypot(c.x - th.x, c.z - th.z) < radius + th.r || Math.hypot(c.x - ab.x, c.z - ab.z) < radius + ab.r) this.damage(dmg, 'special');
   }
 
+  /** 폭발(완전 차징) 범위 피해: 몸통·배·다리 어디든 범위에 닿으면 들어간다 */
+  hitSplash(x: number, z: number, r: number, dmg: number): number {
+    if (!this.alive || this.airborne || this.invulnerable) return 0;
+    const th = this.rig.thorax;
+    const ab = this.rig.abdomenC;
+    const touch = Math.hypot(x - th.x, z - th.z) < r + th.r || Math.hypot(x - ab.x, z - ab.z) < r + ab.r || this.rig.legTouch(x, z, r);
+    return touch ? this.damage(dmg, 'splash') : 0;
+  }
+
   private blockSfx() {
     if (this.t - this.lastBlockSfx > 0.06) {
       this.host.sfx.block();
@@ -437,22 +461,28 @@ export class Spider implements Target, BossInfo, MinionOwner {
     }
   }
 
-  private damage(amount: number, kind: 'normal' | 'weak' | 'exposed' | 'special'): number {
+  private damage(amount: number, kind: 'normal' | 'weak' | 'exposed' | 'special' | 'leg' | 'splash'): number {
     // 페이즈 1에서는 50% 아래로 내려가지 않고, 포효(페이즈 전환)를 예약한다
     let nh = this.hp - amount;
-    if (this.phaseIndex === 0 && nh <= this.maxHp * S.phase2At) {
-      nh = this.maxHp * S.phase2At;
+    const next = this.nextPhaseAt();
+    if (next !== undefined && nh <= this.maxHp * next) {
+      nh = this.maxHp * next;
       this.phaseTrigger = true;
     }
     this.hp = Math.max(0, nh);
     if (kind === 'special') this.rig.flashAll();
-    else this.rig.flashPart(kind === 'normal' ? 'thorax' : 'abdomen');
-    const strong = kind !== 'normal';
+    else if (kind === 'splash') this.rig.flashPart('thorax', 0.7);
+    else if (kind === 'normal') this.rig.flashPart('thorax');
+    else if (kind !== 'leg') this.rig.flashPart('abdomen'); // 다리는 flashLeg 로 따로 표시
+    // 약점/특수기/큰 피해(많이 모은 불꽃)는 묵직하게
+    const heavy = amount >= 6;
+    const strong = (kind !== 'normal' && kind !== 'leg') || heavy;
     this.host.sfx.hit(strong);
     if (strong || this.t - this.lastNum > 0.22) {
       this.lastNum = this.t;
       const where = kind === 'special' ? this.tmp.set(this.pos.x, 4, this.pos.z) : this.tmp.set(this.rig.abdomenC.x, 3.4, this.rig.abdomenC.z);
-      this.host.floatText(where, String(Math.round(amount)) + (kind === 'exposed' ? '!' : ''), kind as FloatKind);
+      const fk: FloatKind = kind === 'weak' || kind === 'exposed' || kind === 'special' ? kind : 'normal';
+      this.host.floatText(where, String(Math.round(amount)) + (kind === 'exposed' ? '!' : ''), fk);
     }
     if (strong) {
       this.host.hitStop(0.035);
@@ -473,6 +503,7 @@ export class Spider implements Target, BossInfo, MinionOwner {
     this.setExposed(false);
     host.fx.telegraphs.clear();
     this.projectiles.clear();
+    this.zones.clear();
     for (const m of [...this.minions]) m.vanish(true);
     this.minions = [];
 
@@ -533,8 +564,9 @@ export class Spider implements Target, BossInfo, MinionOwner {
   setHpFrac(f: number) {
     if (!this.alive) return;
     this.hp = Math.max(1, this.maxHp * f);
-    if (this.phaseIndex === 0 && this.hp <= this.maxHp * S.phase2At) {
-      this.hp = this.maxHp * S.phase2At;
+    const next = this.nextPhaseAt();
+    if (next !== undefined && this.hp <= this.maxHp * next) {
+      this.hp = this.maxHp * next;
       this.phaseTrigger = true;
     }
   }
@@ -543,6 +575,7 @@ export class Spider implements Target, BossInfo, MinionOwner {
     for (const m of this.minions) m.vanish(false);
     this.minions = [];
     this.projectiles.dispose();
+    this.zones.dispose();
     this.rig.dispose();
     this.host.sfx.drone(false);
     this.host.targets = this.host.targets.filter((t) => t !== this);

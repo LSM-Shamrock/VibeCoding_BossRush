@@ -5,6 +5,8 @@ import { Arrows } from './arrows';
 import type { Input } from './input';
 import type { Host } from './types';
 import { PAL } from './palette';
+import { DashFx } from './dashfx';
+import { AimLine } from './aimline';
 
 const V3 = THREE.Vector3;
 
@@ -13,13 +15,6 @@ function lerpAngle(a: number, b: number, t: number) {
   return a + d * t;
 }
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
-
-interface Ghost {
-  g: THREE.Group;
-  mats: THREE.MeshBasicMaterial[];
-  life: number;
-}
-const GHOST_LIFE = 0.28;
 
 type LampState = 'on' | 'thrown' | 'relighting';
 
@@ -42,13 +37,25 @@ export class Player {
   invuln = 0;
   god = false;
   dead = false;
-  autoFire = true;
+  /** 발사 버튼(마우스 왼쪽)이 눌려 있는지 — main 이 매 프레임 넣어 준다 */
+  trigger = false;
+  /** 불꽃을 모은 정도 0~1 (모으는 중일 때만 의미 있음) */
+  charge = 0;
+  /** 불꽃을 모으고 있는 중 */
+  drawn = false;
+  /** 카메라가 바라보는 방향(요). 이동 입력은 이 방향 기준 */
+  camYaw = Math.PI;
+  /** 특수기를 던질 지점 (없으면 조준점) */
+  throwAim: THREE.Vector3 | null = null;
+  /** 조준점(3D). 화면 중앙 십자가가 가리키는 곳 — 불꽃은 여기를 향해 날아간다 */
+  aimPoint = new THREE.Vector3(0, 1.1, 24);
+  /** 시선 방향(단위 벡터) */
+  aimDir = new THREE.Vector3(0, 0, -1);
 
   dashT = 0;
   dashCd = 0;
   private dashInv = 0;
   private dashDir = new V3(0, 0, -1);
-  private ghostT = 0;
 
   gauge = 0;
   /** 이번 도전에서 맞은 횟수 (클리어 화면용) */
@@ -71,6 +78,9 @@ export class Player {
   private legL = new THREE.Group();
   private legR = new THREE.Group();
   private armL = new THREE.Group();
+  private drawOrb!: THREE.Group;
+  private drawCoreMat = new THREE.MeshBasicMaterial({ color: PAL.flameHot, toneMapped: false });
+  private drawHaloMat = new THREE.MeshBasicMaterial({ color: PAL.flame, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
   private bulb!: THREE.Mesh;
   private bulbMat = new THREE.MeshBasicMaterial({ color: CFG.lantern.color, toneMapped: false });
   private light = new THREE.PointLight(CFG.lantern.color, 30, 12, CFG.lantern.decay);
@@ -94,9 +104,11 @@ export class Player {
   private capeGeo = new THREE.BufferGeometry();
   private capeMesh: THREE.Mesh;
 
-  private ghosts: Ghost[] = [];
+  private dashFx: DashFx;
+  private aimLine: AimLine;
   private tmpA = new V3();
   private tmpB = new V3();
+  private tmpC = new V3();
 
   constructor(private host: Host) {
     this.arrows = new Arrows(host, (n) => this.addCharge(n));
@@ -164,20 +176,8 @@ export class Player {
       this.web.visible = false;
     }
 
-    /* 대시 잔상 풀 */
-    for (let i = 0; i < 12; i++) {
-      const g = new THREE.Group();
-      const m1 = new THREE.MeshBasicMaterial({ color: PAL.glow, transparent: true, opacity: 0, depthWrite: false, toneMapped: false });
-      const m2 = m1.clone();
-      const cone = new THREE.Mesh(new THREE.ConeGeometry(0.3, 1.05, 10), m1);
-      cone.position.y = 0.55;
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), m2);
-      head.position.y = 1.35;
-      g.add(cone, head);
-      g.visible = false;
-      host.scene.add(g);
-      this.ghosts.push({ g, mats: [m1, m2], life: 0 });
-    }
+    this.dashFx = new DashFx(host);
+    this.aimLine = new AimLine(host.scene, host.camera);
 
     this.root.add(this.body);
     this.root.add(this.web);
@@ -233,7 +233,15 @@ export class Player {
     armR.position.set(-0.27, 1.12, 0.02);
     add(armR, new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.055, 0.55, 8).translate(0, 0.275, 0).rotateX(Math.PI / 2), cloth));
     add(armR, new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.08, 0.6), wood), 0, -0.02, 0.5);
-    add(armR, new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.04, 0.05), metal), 0, 0, 0.74);
+    // 불꽃을 모으는 놋쇠 고리 (끝에서 불꽃이 자란다)
+    const cup = add(armR, new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.028, 8, 16), metal), 0, 0, 0.86);
+    cup.castShadow = false;
+    // 차징 중인 불꽃: 모을수록 커지고 백열에 가까워진다
+    this.drawOrb = new THREE.Group();
+    this.drawOrb.position.set(0, 0, 0.98);
+    this.drawOrb.add(new THREE.Mesh(new THREE.IcosahedronGeometry(0.3, 1), this.drawCoreMat), new THREE.Mesh(new THREE.SphereGeometry(0.55, 12, 10), this.drawHaloMat));
+    this.drawOrb.visible = false;
+    armR.add(this.drawOrb);
     this.body.add(armR);
 
     // 왼팔 + 등불 (옆으로 늘어뜨림)
@@ -272,7 +280,8 @@ export class Player {
     }
     this.updateLantern(dt);
     this.updateCape(dt);
-    this.updateGhosts(dt);
+    this.dashFx.update(dt);
+    this.updateAimLine();
     this.syncTransform();
   }
 
@@ -289,13 +298,18 @@ export class Player {
     if (dx * dx + dz * dz > 0.09) this.aimYaw = Math.atan2(dx, dz);
     this.yaw = lerpAngle(this.yaw, this.aimYaw, 1 - Math.exp(-CFG.player.turnSpeed * dt));
 
-    // 입력 (카메라가 +Z에서 -Z를 보므로 W = -Z)
-    let ix = (input.held('right') ? 1 : 0) - (input.held('left') ? 1 : 0);
-    let iz = (input.held('down') ? 1 : 0) - (input.held('up') ? 1 : 0);
-    const il = Math.hypot(ix, iz);
+    // 입력: 카메라가 보는 방향이 '앞'. (앞 = W, 오른쪽 = D)
+    const fwd = (input.held('up') ? 1 : 0) - (input.held('down') ? 1 : 0);
+    const side = (input.held('right') ? 1 : 0) - (input.held('left') ? 1 : 0);
+    const il = Math.hypot(fwd, side);
+    let ix = 0;
+    let iz = 0;
     if (il > 0) {
-      ix /= il;
-      iz /= il;
+      const sy = Math.sin(this.camYaw);
+      const cy = Math.cos(this.camYaw);
+      // 앞 = (sin, cos), 오른쪽 = (-cos, sin)
+      ix = (sy * fwd - cy * side) / il;
+      iz = (cy * fwd + sy * side) / il;
     }
 
     // 대시
@@ -303,9 +317,9 @@ export class Player {
       if (il > 0) this.dashDir.set(ix, 0, iz);
       else this.dashDir.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
       this.dashT = CFG.dash.duration;
+      this.dashFx.begin(this.pos.x, this.pos.z, this.dashDir.x, this.dashDir.z);
       this.dashCd = CFG.dash.cooldown;
       this.dashInv = CFG.dash.invuln;
-      this.ghostT = 0;
       if (this.slowT > 0) {
         // 대시는 거미줄을 끊어낸다
         this.slowT = 0;
@@ -318,12 +332,11 @@ export class Player {
     if (this.dashT > 0) {
       this.vel.copy(this.dashDir).multiplyScalar(CFG.dash.speed);
       this.dashT -= dt;
-      this.ghostT -= dt;
-      if (this.ghostT <= 0) {
-        this.ghostT = CFG.dash.ghostEvery;
-        this.spawnGhost();
+      this.dashFx.step(dt, this.pos.x, this.pos.z, this.dashDir.x, this.dashDir.z);
+      if (this.dashT <= 0) {
+        this.vel.copy(this.dashDir).multiplyScalar(CFG.player.speed);
+        this.dashFx.finish(this.pos.x, this.pos.z);
       }
-      if (this.dashT <= 0) this.vel.copy(this.dashDir).multiplyScalar(CFG.player.speed);
     } else {
       const k = Math.min(1, CFG.player.accel * dt);
       const sp = CFG.player.speed * (this.slowT > 0 ? 0.5 : 1);
@@ -360,11 +373,27 @@ export class Player {
     }
 
     // 사격
-    const wantFire = !this.ceaseFire && (this.autoFire || input.mouseDown);
-    if (wantFire && this.fireCd <= 0 && !this.sp.active) this.fire();
+    // 불꽃 차징: 누르는 동안 모으고, 떼면 그 세기로 발사 (특수기 중/결과 화면에서는 취소)
+    if (this.ceaseFire || this.sp.active) {
+      this.cancelDraw();
+    } else if (this.trigger) {
+      if (this.fireCd <= 0) {
+        if (!this.drawn) this.host.sfx.chargeStart();
+        this.drawn = true;
+        const before = this.charge;
+        this.charge = Math.min(1, this.charge + dt / CFG.arrow.chargeTime);
+        this.host.sfx.chargeLevel(this.charge);
+        if (before < 1 && this.charge >= 1) this.host.sfx.chargeFull();
+      }
+    } else if (this.drawn) {
+      this.fire(Math.max(CFG.arrow.minPower, this.charge));
+      this.cancelDraw();
+    }
+    if (this.drawn) this.flash = Math.max(this.flash, this.charge * 0.7);
+    this.updateBow();
 
     // 특수기
-    if (input.tapped('special') && this.gauge >= CFG.special.max && this.lampState === 'on' && !this.sp.active) this.startSpecial(aim);
+    if (input.tapped('special') && this.gauge >= CFG.special.max && this.lampState === 'on' && !this.sp.active) this.startSpecial(this.throwAim ?? aim);
 
     // 걷기 모션
     const spd = Math.min(1, Math.hypot(this.vel.x, this.vel.z) / CFG.player.speed);
@@ -377,22 +406,55 @@ export class Player {
     this.body.rotation.z = 0;
   }
 
-  private fire() {
-    this.fireCd = 1 / CFG.arrow.fireRate;
-    const spread = (Math.random() - 0.5) * 0.04;
-    const a = this.yaw + spread;
-    const dir = this.tmpA.set(Math.sin(a), 0, Math.cos(a));
-    // 석궁 끝(오른쪽 앞) 위치
-    const mz = 1.05;
+  /** 모으던 불꽃을 발사 없이 거두기 */
+  cancelDraw() {
+    if (this.drawn) this.host.sfx.chargeStop();
+    this.drawn = false;
+    this.charge = 0;
+    if (this.drawOrb) this.drawOrb.visible = false;
+    this.aimLine?.update(false, this.tmpC, this.tmpC, 0, 0);
+  }
+
+  /** 차징 모션: 고리 끝에서 불꽃이 자란다 */
+  private updateBow() {
+    const c = this.drawn ? this.charge : 0;
+    const full = c >= 1;
+    this.drawOrb.visible = this.drawn && !this.dead;
+    const flick = 1 + 0.12 * Math.sin(this.t * 38) + 0.07 * Math.sin(this.t * 61);
+    const k = (0.15 + 0.65 * c) * (full ? 1.15 : 1) * flick;
+    this.drawOrb.scale.setScalar(k);
+    this.drawCoreMat.color.set(full ? 0xffe8a8 : PAL.flameHot).multiplyScalar(1.0 + 0.8 * c);
+    this.drawHaloMat.opacity = 0.35 + 0.35 * c;
+  }
+
+  /** 총구(손 끝 고리에서 불꽃이 자라는 자리)의 월드 좌표 */
+  private muzzle(out: THREE.Vector3) {
+    const mz = 1.0;
     const mx = -0.27;
-    const p = this.tmpB.set(
+    return out.set(
       this.pos.x + mx * Math.cos(this.yaw) + mz * Math.sin(this.yaw),
-      1.1,
+      1.12,
       this.pos.z - mx * Math.sin(this.yaw) + mz * Math.cos(this.yaw),
     );
-    this.arrows.spawn(p, dir);
+  }
+
+  /** 모으는 동안 총구 → 조준점 경로 표시 */
+  private updateAimLine() {
+    const on = this.drawn && !this.dead;
+    this.aimLine.update(on, this.muzzle(this.tmpC), this.aimPoint, this.charge, this.t);
+  }
+
+  /** 발사: 고리 끝에서 조준점(화면 중앙 십자가 가리키는 곳)을 향해 정확히 날린다. 흩어짐 없음. */
+  private fire(power: number) {
+    this.fireCd = CFG.arrow.recover;
+    const p = this.muzzle(this.tmpB);
+    const dir = this.tmpA.copy(this.aimPoint).sub(p);
+    const len = dir.length();
+    // 조준점이 코앞이면 방향이 튀므로 시선 방향을 쓴다
+    if (len < 1.5) dir.copy(this.aimDir);
+    else dir.divideScalar(len);
+    this.arrows.spawn(p, dir, power);
     this.flash = 1; // 발사 때 등불이 순간 밝아짐
-    this.host.sfx.shoot();
   }
 
   /* ───────────── 피격 / 사망 / 부활 ───────────── */
@@ -421,6 +483,7 @@ export class Player {
     this.dead = true;
     this.deadT = 0;
     this.lampState = 'thrown'; // 등불 소등 상태로 고정
+    this.cancelDraw();
     this.sp.active = false;
     this.thrown.visible = false;
     this.thrownLight.visible = false;
@@ -463,6 +526,9 @@ export class Player {
     this.relightT = 0;
     this.lanternScale = 0;
     this.sp.active = false;
+    this.cancelDraw();
+    this.arrows.reset();
+    this.dashFx.reset();
     this.pos.set(0, 0, 9);
     this.vel.set(0, 0, 0);
     this.knock.set(0, 0, 0);
@@ -587,30 +653,6 @@ export class Player {
     }
     pos.needsUpdate = true;
     this.capeGeo.computeVertexNormals();
-  }
-
-  /* ───────────── 대시 잔상 ───────────── */
-  private spawnGhost() {
-    const g = this.ghosts.find((x) => x.life <= 0);
-    if (!g) return;
-    g.life = GHOST_LIFE;
-    g.g.visible = true;
-    g.g.position.set(this.pos.x, 0, this.pos.z);
-    g.g.rotation.y = this.yaw;
-  }
-
-  private updateGhosts(dt: number) {
-    for (const g of this.ghosts) {
-      if (g.life <= 0) continue;
-      g.life -= dt;
-      if (g.life <= 0) {
-        g.g.visible = false;
-        continue;
-      }
-      const k = g.life / GHOST_LIFE;
-      for (const m of g.mats) m.opacity = k * 0.45;
-      g.g.scale.setScalar(0.85 + 0.15 * k);
-    }
   }
 
   private syncTransform() {

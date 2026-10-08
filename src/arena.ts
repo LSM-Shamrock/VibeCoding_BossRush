@@ -523,7 +523,7 @@ export class Arena {
     });
 
     /* 기둥 — 멀쩡한 것 / 부러진 것 / 밑동만 남은 것 */
-    const PR = R + 2.1;
+    const PR = CFG.arena.pillarR; // 외벽 바깥 — 플레이어/카메라가 가까이 가지 못한다
     const pillarN = CFG.arena.pillars;
     const kinds: ('tall' | 'broken' | 'stump')[] = [];
     for (let i = 0; i < pillarN; i++) {
@@ -552,6 +552,7 @@ export class Arena {
       const grp = new THREE.Group();
       grp.position.set(Math.cos(a) * PR, 0, Math.sin(a) * PR);
       grp.rotation.y = -a;
+      grp.scale.setScalar(1.3); // 멀어진 만큼 크게, 먼 배경으로서의 존재감 유지
       scene.add(grp);
       const kind = kinds[i];
       const shaftH = kind === 'tall' ? 4.5 : kind === 'broken' ? 1.7 + rand() * 1.6 : 0.5 + rand() * 0.5;
