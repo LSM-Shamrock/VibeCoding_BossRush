@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DEEP NEST</title>
+    <style>
+      :root {
+        --ink: #f4e8d2;
+        --dim: #a8957c;
+        --lamp: #ffc46a;
+        --danger: #ff5a4d;
+        --gold: #ffd27a;
+        --panel: rgba(22, 11, 6, 0.7);
+        --edge: rgba(255, 200, 120, 0.2);
+        --serif: "Cinzel", "Noto Serif KR", "Nanum Myeongjo", "Batang", "Times New Roman", serif;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0; height: 100%; background: #0d0604; overflow: hidden; color: var(--ink);
+        font-family: "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+        user-select: none; -webkit-user-select: none;
+      }
+      /* 가장자리를 어둡게 눌러 동굴 속 느낌을 준다 */
+      body::after { content: ""; position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 52%, rgba(14, 5, 2, 0.6) 100%); }
+      #c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: none; outline: none; }
+      #hud { position: fixed; inset: 0; pointer-events: none; }
+      .hidden { display: none !important; }
+
+      /* 보스 체력바 */
+      #bossbar { position: absolute; top: 22px; left: 50%; transform: translateX(-50%); width: min(640px, 70vw); text-align: center; }
+      #bossname { font-family: var(--serif); font-size: 16px; font-weight: 700; letter-spacing: 0.22em; color: #ffe3b0; text-shadow: 0 1px 8px #000, 0 0 14px rgba(255,140,50,.35); margin-bottom: 6px; }
+      #bosstrack { position: relative; height: 12px; background: rgba(10,3,1,.7); border: 1px solid rgba(255,205,130,.55); border-radius: 2px; overflow: hidden; box-shadow: 0 0 0 2px rgba(10,3,1,.55), 0 0 14px rgba(255,120,40,.25); }
+      #bossfill, #bosschip { position: absolute; left: 0; top: 0; height: 100%; width: 100%; }
+      #bossfill { background: linear-gradient(90deg, #8f1b1b, #e24a2e); transition: width .12s linear; }
+      #bosschip { background: rgba(255,226,180,.6); transition: width .5s ease .2s; }
+      #bossmarks i { position: absolute; top: 0; width: 2px; height: 100%; background: rgba(255,226,180,.85); transform: translateX(-1px); z-index: 2; }
+      #bossfill.exposed { background: linear-gradient(90deg, #d9962b, #ffd27a); }
+      #bosstag { height: 18px; margin-top: 5px; font-size: 12px; font-weight: 700; letter-spacing: .12em; color: var(--gold); opacity: 0; transition: opacity .1s; }
+      #bosstag.on { opacity: 1; animation: blink .5s infinite alternate; }
+      @keyframes blink { from { opacity: .55; } to { opacity: 1; } }
+
+      /* 좌하단: 등불(체력) / 대시 / 특수 */
+      #bl { position: absolute; left: 22px; bottom: 22px; background: var(--panel); border: 1px solid var(--edge); border-radius: 6px; padding: 12px 14px 10px; width: 250px; backdrop-filter: blur(3px); box-shadow: inset 0 0 0 3px rgba(10,3,1,.35); }
+      #lamps { display: flex; gap: 9px; margin-bottom: 10px; }
+      .lamp { width: 24px; height: 24px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #fff7de, var(--lamp) 45%, #c4701c); box-shadow: 0 0 12px 3px rgba(255,160,60,.6); transition: all .25s; }
+      .lamp.off { background: #2a1810; box-shadow: none; opacity: .55; }
+      .row { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12px; color: var(--dim); }
+      .row .lbl { width: 78px; }
+      kbd { font: inherit; font-size: 10px; padding: 1px 5px; border: 1px solid rgba(255,215,150,.4); border-radius: 3px; color: var(--ink); }
+      .mini { flex: 1; height: 8px; background: rgba(10,3,1,.65); border-radius: 2px; overflow: hidden; border: 1px solid rgba(255,205,130,.25); }
+      #dashfill, #spfill { height: 100%; width: 0; background: #b87a30; }
+      #dashfill.ready { background: #ffc46a; }
+      #spfill { background: #b8651f; }
+      #spwrap.ready #spfill { background: var(--gold); box-shadow: 0 0 10px var(--gold); animation: blink .35s infinite alternate; }
+      #spwrap.ready .lbl { color: var(--gold); font-weight: 700; }
+
+      /* 좌상단: 도움말 / 우상단: 상태 */
+      #topright { position: absolute; top: 18px; right: 22px; text-align: right; font-size: 12px; color: var(--dim); text-shadow: 0 1px 6px #000; }
+      #status b { color: var(--gold); }
+      #fps { opacity: .6; margin-top: 2px; }
+
+      #toast { position: absolute; top: 86px; left: 50%; transform: translateX(-50%); padding: 6px 14px; border-radius: 4px; background: var(--panel); border: 1px solid var(--edge); font-size: 13px; opacity: 0; transition: opacity .2s; }
+      #toast.on { opacity: 1; }
+
+      /* 데미지 숫자 */
+      #dmglayer { position: absolute; inset: 0; overflow: hidden; }
+      .dmg { position: absolute; transform: translate(-50%, -50%); font-weight: 800; font-size: 18px; color: #fff4dc; text-shadow: 0 0 6px rgba(0,0,0,.9), 0 1px 2px #000; animation: floatUp .8s ease-out forwards; white-space: nowrap; }
+      .dmg.weak { color: #ffb347; font-size: 24px; }
+      .dmg.exposed { color: var(--gold); font-size: 30px; }
+      .dmg.special { color: #fff0b8; font-size: 38px; text-shadow: 0 0 12px rgba(255,150,40,.9), 0 1px 2px #000; }
+      .dmg.player { color: var(--danger); font-size: 28px; }
+      @keyframes floatUp { 0% { opacity: 0; transform: translate(-50%, -30%) scale(.7); } 15% { opacity: 1; transform: translate(-50%, -60%) scale(1.1); } 100% { opacity: 0; transform: translate(-50%, -190%) scale(1); } }
+
+      /* 중앙 배너 (보스 등장 / 페이즈 전환) */
+      #banner { position: absolute; left: 0; right: 0; top: 30%; text-align: center; opacity: 0; pointer-events: none; }
+      #banner.on { animation: bannerIn var(--dur, 2.4s) ease-out forwards; }
+      #banner .bt { font-family: var(--serif); font-size: clamp(30px, 5.4vw, 64px); font-weight: 800; letter-spacing: .28em; text-indent: .28em; color: #fff0d0; text-shadow: 0 0 28px rgba(255,110,40,.8), 0 2px 10px #000; }
+      #banner .bs { margin-top: 8px; font-size: clamp(13px, 1.8vw, 18px); letter-spacing: .3em; color: var(--lamp); text-shadow: 0 1px 8px #000; }
+      @keyframes bannerIn { 0% { opacity: 0; transform: scale(1.18); } 10% { opacity: 1; transform: scale(1); } 78% { opacity: 1; } 100% { opacity: 0; } }
+
+      /* 디버프 표시 */
+      #debuff { position: absolute; left: 22px; bottom: 150px; padding: 6px 12px; border-radius: 6px; background: rgba(255,236,200,.16); border: 1px solid rgba(255,236,200,.55); color: #fff1d8; font-size: 13px; font-weight: 700; letter-spacing: .06em; animation: blink .4s infinite alternate; }
+      .dbg { color: #ffb347; }
+
+
+      /* 일시정지 화면의 키 설정 패널 */
+      #overlay.compact { background: radial-gradient(ellipse at center, rgba(12,5,2,.82), rgba(12,5,2,.95)); }
+      #overlay.compact #ovtitle { font-size: clamp(24px, 4.4vw, 40px); }
+      #overlay.compact #ovbody { margin-top: 10px; }
+      .keypanel { margin: 0 auto; width: min(560px, 92vw); max-height: calc(100vh - 200px); display: flex; flex-direction: column; text-align: left; cursor: default; background: rgba(22,11,6,.82); border: 1px solid var(--edge); border-radius: 6px; padding: 12px 18px 10px; box-shadow: inset 0 0 0 3px rgba(10,3,1,.35); }
+      .kp-top { flex: none; padding-bottom: 6px; border-bottom: 1px solid rgba(255,200,120,.14); }
+      .kp-body { flex: 1; min-height: 0; overflow-y: auto; padding-top: 6px; }
+      .kp-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+      .kp-head > span:first-child { font-family: var(--serif); font-size: 15px; font-weight: 700; letter-spacing: .16em; color: #ffe3b0; }
+      .kp-grid { display: grid; grid-template-columns: 1fr 120px 120px; align-items: center; }
+      .kp-th { font-size: 11px; letter-spacing: .12em; color: var(--dim); text-align: center; padding-bottom: 2px; }
+      .kp-label { font-size: 14px; color: var(--ink); padding: 2px 0; }
+      .kp-label small { margin-left: 8px; font-size: 11px; color: var(--dim); }
+      .kp-cell { padding: 2px 0; text-align: center; }
+      .kp-sep { border-top: 1px solid rgba(255,200,120,.12); margin-top: 3px; padding-top: 5px; }
+      .keycap { display: inline-block; min-width: 100px; padding: 3px 10px; font-size: 13px; line-height: 1.4; text-align: center; color: var(--ink); background: rgba(10,3,1,.65); border: 1px solid rgba(255,205,130,.4); border-radius: 4px; cursor: pointer; transition: border-color .12s, background .12s; }
+      .keycap:hover { border-color: var(--lamp); background: rgba(60,28,10,.7); }
+      .keycap.empty { color: rgba(168,149,124,.55); border-style: dashed; }
+      .keycap.listening { color: var(--gold); border-color: var(--gold); background: rgba(90,45,10,.75); animation: blink .5s infinite alternate; }
+      .kp-fixed { margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(255,200,120,.12); display: grid; grid-template-columns: 1fr 1fr; gap: 1px 18px; font-size: 12px; color: var(--dim); }
+      .kp-fixed div { display: flex; justify-content: space-between; gap: 8px; }
+      .kp-fixed b { font-weight: 600; color: var(--ink); text-align: right; }
+      .kp-msg { min-height: 20px; margin-top: 4px; font-size: 12.5px; color: var(--dim); }
+      .kp-msg.ok { color: var(--gold); }
+      .kp-msg.err { color: var(--danger); }
+      .kp-msg.hint { color: var(--lamp); }
+      .kp-btn { font-size: 12px; padding: 3px 12px; color: var(--lamp); border: 1px solid rgba(255,205,130,.4); border-radius: 999px; cursor: pointer; }
+      .kp-btn:hover { background: rgba(60,28,10,.7); border-color: var(--lamp); }
+      .kp-debug { margin-top: 8px; font-size: 12px; line-height: 1.7; color: var(--dim); }
+      .kp-debug summary { cursor: pointer; letter-spacing: .06em; }
+      .kp-debug b { color: var(--ink); font-weight: 600; }
+
+      /* 오버레이(타이틀 / 사망) */
+      #overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(ellipse at center, rgba(14,6,3,.55), rgba(14,6,3,.92)); text-align: center; cursor: pointer; }
+      #ovtitle { font-family: var(--serif); font-size: clamp(28px, 6vw, 56px); letter-spacing: .22em; text-indent: .22em; font-weight: 800; color: #ffd98a; background: linear-gradient(180deg, #fff1c4 10%, #f0a640 55%, #b8561a 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 0 18px rgba(255,120,30,.45)) drop-shadow(0 2px 2px rgba(0,0,0,.8)); }
+      #ovbody { margin-top: 18px; font-size: 15px; line-height: 1.9; color: var(--ink); }
+      #ovbody .go { margin-top: 14px; display: inline-block; padding: 8px 22px; border: 1px solid var(--lamp); border-radius: 999px; color: var(--lamp); letter-spacing: .12em; animation: blink .8s infinite alternate; }
+    </style>
+  </head>
+  <body>
+    <canvas id="c" tabindex="0"></canvas>
+
+    <div id="hud">
+      <div id="bossbar" class="hidden">
+        <div id="bossname"></div>
+        <div id="bosstrack"><div id="bosschip"></div><div id="bossfill"></div><div id="bossmarks"></div></div>
+        <div id="bosstag">약점 노출!</div>
+      </div>
+
+      <div id="topright">
+        <div id="status"></div>
+        <div id="fps"></div>
+      </div>
+
+      <div id="banner"><div class="bt" id="bt"></div><div class="bs" id="bs"></div></div>
+      <div id="debuff" class="hidden">거미줄에 걸렸다! <kbd id="kdebuff">Space</kbd> 대시로 끊어내기</div>
+      <div id="toast"></div>
+      <div id="dmglayer"></div>
+
+      <div id="bl">
+        <div id="lamps"></div>
+        <div class="row"><span class="lbl">대시 <kbd id="kdash">Space</kbd></span><div class="mini"><div id="dashfill"></div></div></div>
+        <div class="row" id="spwrap"><span class="lbl">특수 <kbd id="kspecial">Q</kbd></span><div class="mini"><div id="spfill"></div></div></div>
+      </div>
+    </div>
+
+    <div id="overlay">
+      <div id="ovtitle">DEEP NEST</div>
+      <div id="ovbody"></div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
