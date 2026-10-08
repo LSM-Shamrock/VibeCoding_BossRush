@@ -15,7 +15,7 @@ export const CFG = {
     shoulder: 0.75, // 오른쪽 어깨 쪽으로 치우친 정도
     pitchDeg: 6, // 기본 내려다보는 각도 (+ = 아래)
     pitchMin: -38, // 가장 높이 올려다보는 각도 (음수 = 위)
-    pitchMax: 52,
+    pitchMax: 68, // 52°에서는 발치 1.8칸 안쪽 바닥을 조준할 수 없었다 (새끼 거미가 붙었을 때)
     sens: 0.0022, // 마우스 감도 (라디안/픽셀)
     lockSmooth: 7, // 락온 시 카메라가 보스를 따라 도는 속도
     wallLimit: 20.4, // 이 반경 밖으로는 카메라가 나가지 않는다 (외벽 안쪽)
@@ -126,11 +126,12 @@ export const CFG = {
       life: [8, 9, 10], // 장판이 남아 있는 시간
       maxZones: 8,
       slow: 0.35, // 장판 위에 있는 동안 계속 갱신되는 감속 지속시간
+      slowMul: 0.33, // 장판 위 이동 속도 배율 (거미줄 탄은 0.5 → 장판은 약 1.5배 더 느리다)
       recover: 1.2,
     },
     // 알 투척 (페이즈 2~): 알 2개 → 일정 시간 뒤 부화. 알은 체력이 있어 깨뜨리면 새끼가 나오지 않는다
-    // eggHp: 만땅 차징 14 기준 2발이 필요 (부화 2.0초 안에 해내려면 미리 모아 둔 차징이 필요 — 쉽지 않다)
-    eggs: { windup: 0.9, count: 2, flight: 0.85, hatch: 2.0, eggHp: 26, babies: 2, recover: 1.2, maxMinions: 6 },
+    // eggHp: 만땅 차징(14) 1발이면 깨진다 — 대신 부화(2.0초) 전에 차징을 끝내고 맞혀야 한다. 덜 모은 불꽃이면 2발 이상
+    eggs: { windup: 0.9, count: 2, flight: 0.85, hatch: 2.0, eggHp: 13, babies: 2, recover: 1.2, maxMinions: 6 },
     baby: { hp: 2, speed: [6.0, 7.0, 7.8], radius: 0.55 },
     stagger: 2.4, // 새끼를 모두 처치했을 때 여왕이 휘청이는 시간
     roar: 2.3, // 페이즈 전환 포효 (이 동안 무적)

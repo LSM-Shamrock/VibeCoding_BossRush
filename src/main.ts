@@ -18,6 +18,8 @@ import { KeyPanel } from './keypanel';
 import type { FloatKind, Host, Target } from './types';
 import { PAL } from './palette';
 
+/** 락온 중 시선이 몸통 방향보다 이만큼(rad) 더 아래를 보면 자유 조준으로 전환 */
+const LOCK_FREE_AIM = 0.17;
 const V3 = THREE.Vector3;
 const TAU = Math.PI * 2;
 const lerpAngle = (a: number, b: number, t: number) => {
@@ -531,7 +533,16 @@ class Game implements Host {
     const cp = Math.cos(this.camPitch);
     const O = this.rayO.set(px, this.pivotY(), pz);
     const D = this.rayD.set(fx * cp, -Math.sin(this.camPitch), fz * cp);
+    // 락온 중에는 보스 몸통을 향하지만, 시선을 몸통 방향보다 확연히 아래로 내리면(새끼 거미·알을 쏠 때)
+    // 그쪽을 자유롭게 조준한다. 그렇지 않으면 락온 중에는 아래를 볼 수 없다.
+    let lockedOnBoss = false;
     if (b && this.lockOn) {
+      const th = b.rig.thorax;
+      const hd = Math.hypot(th.x - O.x, th.z - O.z) || 1;
+      const pitchToBoss = Math.atan2(O.y - th.y, hd); // + = 몸통이 아래에 있음
+      lockedOnBoss = this.camPitch - pitchToBoss < LOCK_FREE_AIM;
+    }
+    if (b && lockedOnBoss) {
       const th = b.rig.thorax;
       this.aim3.set(th.x, th.y, th.z);
     } else {

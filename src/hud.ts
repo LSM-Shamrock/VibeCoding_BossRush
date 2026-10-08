@@ -178,7 +178,7 @@ export class Hud {
     const el = document.createElement('div');
     // 크기는 종류(약점 등), 색은 숫자 크기로 정한다 (클수록 주황 → 붉은색)
     const n = parseInt(text, 10);
-    const tier = kind === 'player' || !Number.isFinite(n) ? '' : n >= 12 ? ' t4' : n >= 8 ? ' t3' : n >= 4 ? ' t2' : ' t1';
+    const tier = kind === 'player' || !Number.isFinite(n) ? '' : n >= 40 ? ' t4' : n >= 20 ? ' t3' : n >= 10 ? ' t2' : ' t1';
     el.className = `dmg ${kind}${tier}`;
     el.textContent = text;
     el.style.left = `${(this.v.x * 0.5 + 0.5) * window.innerWidth + (Math.random() - 0.5) * 24}px`;

@@ -62,6 +62,8 @@ export class Player {
   hitsTaken = 0;
   /** 거미줄에 걸린 남은 시간 (이동 속도 감소, 대시로 벗어남) */
   slowT = 0;
+  /** 감속 중 이동 속도 배율 (거미줄 탄 0.5, 거미줄 장판은 더 느리게) */
+  private slowMul = 0.5;
   private knock = new V3();
   private web!: THREE.Mesh;
   private fireCd = 0;
@@ -339,7 +341,7 @@ export class Player {
       }
     } else {
       const k = Math.min(1, CFG.player.accel * dt);
-      const sp = CFG.player.speed * (this.slowT > 0 ? 0.5 : 1);
+      const sp = CFG.player.speed * (this.slowT > 0 ? this.slowMul : 1);
       this.vel.x += (ix * sp - this.vel.x) * k;
       this.vel.z += (iz * sp - this.vel.z) * k;
     }
@@ -492,8 +494,9 @@ export class Player {
   }
 
   /** 거미줄 등으로 이동 속도를 줄인다 (대시로 해제) */
-  slow(seconds: number) {
+  slow(seconds: number, mul = 0.5) {
     if (this.dead) return;
+    this.slowMul = this.slowT > 0 ? Math.min(this.slowMul, mul) : mul;
     this.slowT = Math.max(this.slowT, seconds);
   }
 

@@ -18,8 +18,8 @@ function webTexture(): THREE.CanvasTexture {
   // 끈적한 막
   const fill = g.createRadialGradient(c, c, 0, c, c, R);
   fill.addColorStop(0, 'rgba(243,230,200,0.34)');
-  fill.addColorStop(0.8, 'rgba(243,230,200,0.2)');
-  fill.addColorStop(1, 'rgba(243,230,200,0.08)');
+  fill.addColorStop(0.7, 'rgba(243,230,200,0.2)');
+  fill.addColorStop(1, 'rgba(243,230,200,0)');
   g.fillStyle = fill;
   g.beginPath();
   g.arc(c, c, R, 0, Math.PI * 2);
@@ -37,7 +37,7 @@ function webTexture(): THREE.CanvasTexture {
     g.stroke();
   }
   g.lineWidth = 2;
-  for (const rr of [0.2, 0.4, 0.6, 0.8, 0.97]) {
+  for (const rr of [0.2, 0.4, 0.6, 0.8]) {
     g.beginPath();
     for (let i = 0; i < N; i++) {
       const a0 = ang(i);
@@ -52,7 +52,7 @@ function webTexture(): THREE.CanvasTexture {
   g.globalCompositeOperation = 'destination-in';
   const mask = g.createRadialGradient(c, c, 0, c, c, S / 2);
   mask.addColorStop(0, 'rgba(0,0,0,1)');
-  mask.addColorStop(0.86, 'rgba(0,0,0,1)');
+  mask.addColorStop(0.7, 'rgba(0,0,0,1)');
   mask.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = mask;
   g.fillRect(0, 0, S, S);
@@ -81,7 +81,6 @@ interface Zone {
   active: boolean;
   group: THREE.Group;
   disc: THREE.Mesh;
-  rim: THREE.Mesh;
   t: number;
   life: number;
   x: number;
@@ -129,20 +128,15 @@ export class WebZones {
       this.globs.push({ active: false, mesh, mark, markRing, markFill, t: 0, flight: 1, peak: 5, radius: 3, life: 8, from: new V3(), to: new V3() });
     }
     const discMat = new THREE.MeshBasicMaterial({ map: this.tex, color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, toneMapped: false });
-    const rimMat = new THREE.MeshBasicMaterial({ color: IVORY, transparent: true, opacity: 0, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
-    rimMat.color.multiplyScalar(1.25);
     for (let i = 0; i < T.maxZones; i++) {
       const group = new THREE.Group();
       const disc = new THREE.Mesh(this.discGeo, discMat.clone());
-      const rim = new THREE.Mesh(this.ringGeo, rimMat.clone());
       disc.position.y = 0.045;
-      rim.position.y = 0.05;
       disc.renderOrder = 1;
-      rim.renderOrder = 2;
-      group.add(disc, rim);
+      group.add(disc);
       group.visible = false;
       this.host.scene.add(group);
-      this.zones.push({ active: false, group, disc, rim, t: 0, life: 8, x: 0, z: 0, r: T.radius, spin: Math.random() * 6 });
+      this.zones.push({ active: false, group, disc, t: 0, life: 8, x: 0, z: 0, r: T.radius, spin: Math.random() * 6 });
     }
   }
 
@@ -224,15 +218,13 @@ export class WebZones {
       const k = inK * outK;
       const s = z.r * (0.55 + 0.45 * (1 - Math.pow(1 - inK, 3)));
       z.disc.scale.setScalar(s);
-      z.rim.scale.setScalar(s);
-      (z.disc.material as THREE.MeshBasicMaterial).opacity = 0.95 * k;
       // 끝이 가까우면 깜빡이며 걷힌다
-      const warn = z.life - z.t < 1.6 ? 0.5 + 0.5 * Math.sin(z.t * 18) : 1;
-      (z.rim.material as THREE.MeshBasicMaterial).opacity = 0.55 * k * warn;
+      const warn = z.life - z.t < 1.6 ? 0.6 + 0.4 * Math.sin(z.t * 18) : 1;
+      (z.disc.material as THREE.MeshBasicMaterial).opacity = 0.95 * k * warn;
       // 위에 서 있으면 감속. 대시 중에는 넘어가므로 영향 없음
       if (!pl.dead && pl.dashT <= 0 && k > 0.3) {
         const d = Math.hypot(pl.pos.x - z.x, pl.pos.z - z.z);
-        if (d < z.r - 0.1) pl.slow(T.slow);
+        if (d < z.r - 0.1) pl.slow(T.slow, T.slowMul);
       }
     }
   }
@@ -259,7 +251,6 @@ export class WebZones {
     for (const z of this.zones) {
       this.host.scene.remove(z.group);
       (z.disc.material as THREE.Material).dispose();
-      (z.rim.material as THREE.Material).dispose();
     }
     this.globGeo.dispose();
     this.globMat.dispose();
