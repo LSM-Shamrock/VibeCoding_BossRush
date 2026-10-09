@@ -77,10 +77,10 @@
 
       /* 화면 가장자리 붉은 연출: 맞은 순간 번쩍(#hurt) + 체력이 1~2칸일 때 계속 맥동(#lowhp) */
       #hurt, #lowhp { position: absolute; inset: 0; pointer-events: none; opacity: 0; }
-      #hurt { background: radial-gradient(ellipse at center, rgba(255,40,20,0) 34%, rgba(205,20,10,.55) 68%, rgba(120,0,0,.95) 100%); }
-      #hurt::after { content: ""; position: absolute; inset: 0; background: rgba(255,45,28,.22); }
-      #hurt.on { animation: hurt .8s ease-out; }
-      @keyframes hurt { 0% { opacity: 1; } 100% { opacity: 0; } }
+      #hurt { background: radial-gradient(ellipse at center, rgba(255,40,20,.22) 10%, rgba(215,20,10,.62) 52%, rgba(130,0,0,.97) 100%); }
+      #hurt::after { content: ""; position: absolute; inset: 0; background: rgba(255,35,20,.3); }
+      #hurt.on { animation: hurt 1.7s ease-out; }
+      @keyframes hurt { 0% { opacity: 1; } 35% { opacity: .72; } 100% { opacity: 0; } }
       #lowhp { background: radial-gradient(ellipse at center, transparent 50%, rgba(190,20,10,.5) 100%); }
       #lowhp.on { animation: lowpulse 1.5s ease-in-out infinite alternate; }
       #lowhp.crit { background: radial-gradient(ellipse at center, transparent 38%, rgba(215,15,8,.7) 100%); animation-duration: .7s; }

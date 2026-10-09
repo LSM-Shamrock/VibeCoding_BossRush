@@ -49,6 +49,8 @@ export interface Host {
   /** 시야각을 순간적으로 deg 만큼 벌렸다가 되돌린다 (대시의 속도감) */
   punch(deg: number): void;
   hitStop(seconds: number): void;
+  /** 히트스톱이 끝난 뒤 시간 배율을 0 → 1 로 서서히 되돌린다 (피격 연출) */
+  rampUp(seconds: number): void;
   /** 일정 시간 동안 시간 배율을 낮춘다 (연출용 슬로모션) */
   slowmo(scale: number, seconds: number): void;
   floatText(p: THREE.Vector3, text: string, kind: FloatKind): void;

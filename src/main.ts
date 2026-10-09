@@ -65,6 +65,8 @@ class Game implements Host {
   private shakeAmt = 0;
   private fovKick = 0;
   private hitStopT = 0;
+  private rampLeft = 0;
+  private rampDur = 1;
   private slowScale = 1;
   private slowT = 0;
   // 어깨 너머 카메라
@@ -176,6 +178,10 @@ class Game implements Host {
   }
   hitStop(seconds: number) {
     this.hitStopT = Math.max(this.hitStopT, seconds);
+  }
+  rampUp(seconds: number) {
+    this.rampDur = Math.max(0.01, seconds);
+    this.rampLeft = this.rampDur;
   }
   slowmo(scale: number, seconds: number) {
     this.slowScale = scale;
@@ -354,6 +360,11 @@ class Game implements Host {
     } else if (this.hitStopT > 0) {
       this.hitStopT -= raw;
       dt = 0;
+    } else if (this.rampLeft > 0) {
+      // 0배속 → 1배속 (처음엔 느리게 풀리다가 점점 빨라진다)
+      this.rampLeft -= raw;
+      const k = Math.min(1, Math.max(0, 1 - this.rampLeft / this.rampDur));
+      dt = raw * k * k * (3 - 2 * k);
     } else if (this.slowT > 0) {
       this.slowT -= raw;
       dt = raw * this.slowScale;

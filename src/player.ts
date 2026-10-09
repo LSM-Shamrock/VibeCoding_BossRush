@@ -7,6 +7,7 @@ import type { Host } from './types';
 import { PAL } from './palette';
 import { DashFx } from './dashfx';
 import { AimLine } from './aimline';
+import { LostFlames } from './lostflame';
 
 const V3 = THREE.Vector3;
 
@@ -107,6 +108,7 @@ export class Player {
   private capeMesh: THREE.Mesh;
 
   private dashFx: DashFx;
+  private lostFlames: LostFlames;
   private aimLine: AimLine;
   private tmpA = new V3();
   private tmpB = new V3();
@@ -179,6 +181,7 @@ export class Player {
     }
 
     this.dashFx = new DashFx(host);
+    this.lostFlames = new LostFlames(host);
     this.aimLine = new AimLine(host.scene, host.camera);
 
     this.root.add(this.body);
@@ -265,6 +268,7 @@ export class Player {
   /* ───────────── 업데이트 ───────────── */
   update(dt: number, input: Input, aim: THREE.Vector3) {
     this.t += dt;
+    this.lostFlames.update(dt);
     this.flash = Math.max(0, this.flash - dt * 9);
     this.hurtFlash = Math.max(0, this.hurtFlash - dt * 4);
     for (const m of this.clothMats) m.emissive.setRGB(0.1 + this.hurtFlash * 0.9, 0.05 + this.hurtFlash * 0.12, 0.03 + this.hurtFlash * 0.1);
@@ -472,8 +476,11 @@ export class Player {
     const kl = Math.hypot(kx, kz) || 1;
     this.knock.x += (kx / kl) * 9;
     this.knock.z += (kz / kl) * 9;
-    this.host.hitStop(0.07);
+    // 시간이 완전히 멈췄다가(0배속) 서서히 1배속으로 돌아온다
+    this.host.hitStop(0.13);
+    this.host.rampUp(0.55);
     this.host.shake(0.7);
+    this.lostFlames.spawn(this.pos.x, this.pos.z, 1);
     this.host.sfx.playerHit();
     this.host.floatText(this.tmpA.set(this.pos.x, 2, this.pos.z), '-1', 'player');
     this.host.fx.particles.burst(this.tmpA.set(this.pos.x, 1, this.pos.z), 0xff5a4d, 18, 6, 0.5, 0.14, 0.4);
