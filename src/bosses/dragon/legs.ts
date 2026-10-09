@@ -20,8 +20,9 @@ const KT = 16.0; // 굵기 (원통)
 const KS = 8.0; // 무릎 구슬 (그대로)
 // 거미 값 그대로: L1 2.6, L2 4.7, 윗다리 굵기 0.3, 아랫다리 0.27, 무릎 구 0.4
 const LEG_S = 0.75; // 발을 뺀 다리 파츠(원통 · 무릎 구슬) 전체 배율
-const L1 = 2.6 * KL * LEG_S; // 허벅지와 종아리 길이를 같게 (긴 쪽 4.7 을 짧은 쪽 2.6 에 맞춤)
-const L2 = 2.6 * KL * LEG_S;
+const LEN_K = 1.25; // 허벅지 · 종아리 길이 배율
+const L1 = 2.6 * KL * LEG_S * LEN_K; // 허벅지와 종아리 길이를 같게 (긴 쪽 4.7 을 짧은 쪽 2.6 에 맞춤)
+const L2 = 2.6 * KL * LEG_S * LEN_K;
 const UP_T = 0.3 * KT * LEG_S;
 const LO_T = 0.27 * KT * LEG_S;
 const KNEE_R = KS * LEG_S;
@@ -34,8 +35,8 @@ const FORE = [true, true, false, false];
 // 옆 방향 기준, 양수 = 앞쪽. 앞에서 볼 때만 ㄱ자가 되던 다리를 머리 쪽 안쪽으로 45° 돌려, 옆에서도 ㄱ자로 보이게 했다
 const TURN = Math.PI / 4;
 const HOME_ANGLE = [0.5 + TURN, 0.5 + TURN, -0.35 + TURN, -0.35 + TURN];
-const HOME_R = 9;
-const HOME_DROP = 10.8;
+const HOME_R = 9 * 1.25;
+const HOME_DROP = 10.8 * 1.25;
 
 /**
  * 가로(축을 지나는 수평면)로 반을 자른 원뿔대. +Z 방향으로 뻗고, 아랫면(y=0)이 평평하며 위쪽 반만 남는다.
