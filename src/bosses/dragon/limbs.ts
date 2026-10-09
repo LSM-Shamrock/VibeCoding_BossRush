@@ -47,13 +47,13 @@ const ARM: Record<ArmPose, PoseSpec> = {
 
 const LEG: Record<LegPose, PoseSpec> = {
   // 날 때: 몸 뒤쪽으로 쭉 젖혀 늘어뜨린다
-  trail: { u: [0.42, -0.48, -0.77], f: [0.14, -0.1, -0.98], h: [0.04, -0.45, -0.89], spread: 0.55, curl: 0.6 },
+  trail: { u: [0.3, -0.82, 0.57], f: [0.1, -0.5, -0.87], h: [0.04, -0.98, 0.17], spread: 0.6, curl: 0.55 },
   // 급강하 · 내려찍기: 발톱을 앞아래로 펼쳐 낚아챈다
   dive: { u: [0.4, -0.62, 0.66], f: [0.15, -0.88, -0.2], h: [0.08, -0.3, 0.95], spread: 1, curl: 0.15, stiff: 220 },
   // 착지 버티기: 다리를 벌려 땅을 짚는다
   brace: { u: [0.85, -0.45, 0.28], f: [0.35, -0.93, -0.1], h: [0.12, -0.22, 0.97], spread: 1, curl: 0.1, stiff: 240 },
   // 포효: 뒷다리는 아래로 늘어뜨려 중심을 잡는다
-  roar: { u: [0.5, -0.75, -0.4], f: [0.15, -0.55, -0.82], h: [0.05, -0.5, -0.86], spread: 0.8, curl: 0.35, stiff: 160 },
+  roar: { u: [0.4, -0.9, 0.2], f: [0.15, -0.55, -0.8], h: [0.05, -0.95, 0.2], spread: 0.8, curl: 0.35, stiff: 160 },
   lie: { u: [0.95, -0.35, -0.1], f: [0.65, -0.75, -0.1], h: [0.12, -0.2, 0.97], spread: 0.7, curl: 0.2, stiff: 90 },
 };
 
@@ -296,7 +296,7 @@ export class DragonLimb {
       // 각 파츠는 곧은 막대라 휘지 않고, 꺾이는 곳은 다리 전체(엉덩이) · 무릎 · 발목뿐이다.
       this.mT.lerpVectors(j[0], j[1], 0.5);
       this.mC.lerpVectors(j[1], j[2], 0.5);
-      this.setSeg(this.seg[0], j[0], this.mT, this.R[0]);
+      this.setSeg(this.seg[0], j[0], this.mT, this.R[0] * 1.15);
       this.setSeg(this.seg[3], this.mT, j[1], this.R[0] * 0.69);
       this.setSeg(this.seg[1], j[1], this.mC, this.R[1] * 1.25);
       this.setSeg(this.seg[4], this.mC, j[2], this.R[1] * 0.7);
