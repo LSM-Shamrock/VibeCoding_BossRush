@@ -7,7 +7,7 @@ import { aimed, merge, placed } from './geo';
  * 2층 · 이무기의 못 — 1층(붉은 모래빛 유적)과 전혀 다른 곳.
  *
  *   · 색: 한밤의 군청·청록. 돌은 푸르스름한 점판암, 불빛은 차가운 청백색 도깨비불. (플레이어의 금빛, 위험의 붉은빛이 더 또렷이 읽힌다)
- *   · 지형: 둥근 석단(dais)이 검은 못 한가운데 떠 있다. 바닥은 방사형 돌판 + 한가운데 똬리 튼 뱀 문양.
+ *   · 지형: 둥근 석단(dais)이 검은 못 한가운데 떠 있다. 바닥은 방사형 돌판.
  *           바깥은 끝없는 물, 현무암 기둥 군락, 부서진 돌다리, 연잎, 갈대, 그리고 달빛.
  *   · 그림자/반사: 물과 젖은 돌바닥, 이무기 비늘이 같은 환경맵(하늘+달)을 비춘다.
  */
@@ -45,106 +45,6 @@ function canvas(size: number) {
   return { cv, g: cv.getContext('2d', { willReadFrequently: true })! };
 }
 
-/* ───────────────────────── 바닥 문양: 똬리 튼 뱀 ───────────────────────── */
-function drawSerpentGlyph(g: CanvasRenderingContext2D, S: number, lw: number, withHead = true) {
-  const c = S / 2;
-  g.lineCap = 'round';
-  g.lineJoin = 'round';
-  // 나선(뱀의 몸): 바깥에서 한가운데로 감겨 들어간다
-  const turns = 4;
-  const rMax = 0.6 * c;
-  const rMin = 0.05 * c;
-  const total = turns * TAU;
-  g.beginPath();
-  let ex = 0;
-  let ey = 0;
-  let ea = 0;
-  for (let i = 0; i <= 400; i++) {
-    const u = i / 400;
-    const th = u * total;
-    const r = rMin + (rMax - rMin) * u;
-    const x = c + Math.cos(th) * r;
-    const y = c + Math.sin(th) * r;
-    if (i === 0) g.moveTo(x, y);
-    else g.lineTo(x, y);
-    if (i === 400) {
-      ex = x;
-      ey = y;
-      ea = th + Math.PI / 2 - 0.05;
-    }
-  }
-  g.lineWidth = 15 * lw;
-  g.stroke();
-  // 머리: 나선 바깥 끝에서 바깥쪽을 노려보는 삼각형 머리
-  if (withHead) {
-    g.save();
-    g.translate(ex, ey);
-    g.rotate(ea);
-    g.beginPath();
-    g.moveTo(70, 0);
-    g.lineTo(-28, -42);
-    g.lineTo(-10, 0);
-    g.lineTo(-28, 42);
-    g.closePath();
-    g.lineWidth = 7 * lw;
-    g.stroke();
-    for (const s of [-1, 1]) {
-      g.beginPath();
-      g.arc(14, s * 17, 6, 0, TAU);
-      g.stroke();
-    }
-    g.restore();
-  }
-  // 가운데 눈 같은 고리
-  g.beginPath();
-  g.arc(c, c, 0.035 * c, 0, TAU);
-  g.lineWidth = 6 * lw;
-  g.stroke();
-  // 비늘 눈금 고리(V자가 이어진 띠)
-  const chev = (r: number, n: number, size: number) => {
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * TAU;
-      const x = c + Math.cos(a) * r * c;
-      const y = c + Math.sin(a) * r * c;
-      g.save();
-      g.translate(x, y);
-      g.rotate(a);
-      g.beginPath();
-      g.moveTo(-size, -size * 0.9);
-      g.lineTo(size * 0.6, 0);
-      g.lineTo(-size, size * 0.9);
-      g.lineWidth = 3.4 * lw;
-      g.stroke();
-      g.restore();
-    }
-  };
-  chev(0.72, 56, 14);
-  g.beginPath();
-  g.arc(c, c, 0.672 * c, 0, TAU);
-  g.lineWidth = 3 * lw;
-  g.stroke();
-  g.beginPath();
-  g.arc(c, c, 0.77 * c, 0, TAU);
-  g.lineWidth = 3 * lw;
-  g.stroke();
-  // 가장자리: 물결 띠
-  g.beginPath();
-  for (let i = 0; i <= 720; i++) {
-    const a = (i / 720) * TAU;
-    const r = (0.925 + 0.012 * Math.sin(a * 36)) * c;
-    const x = c + Math.cos(a) * r;
-    const y = c + Math.sin(a) * r;
-    if (i === 0) g.moveTo(x, y);
-    else g.lineTo(x, y);
-  }
-  g.closePath();
-  g.lineWidth = 4 * lw;
-  g.stroke();
-  g.beginPath();
-  g.arc(c, c, 0.965 * c, 0, TAU);
-  g.lineWidth = 5 * lw;
-  g.stroke();
-}
 
 interface PondFloor {
   map: THREE.CanvasTexture;
@@ -360,22 +260,6 @@ function makePondFloor(rand: () => number): PondFloor {
     crack(c + Math.cos(a) * d, c + Math.sin(a) * d, rand() * TAU, 8 + Math.floor(rand() * 12), 5 * f, 1);
   }
 
-  // 문양: 음각 홈 + 차가운 청록 상감
-  g.strokeStyle = '#02050b';
-  drawSerpentGlyph(g, S, 1.3 * f);
-  g.strokeStyle = 'rgba(96,214,230,0.34)';
-  drawSerpentGlyph(g, S, 0.5 * f);
-  b.save();
-  b.scale(0.5, 0.5);
-  b.strokeStyle = '#080808';
-  drawSerpentGlyph(b, S, 1.3 * f);
-  b.restore();
-  q.save();
-  q.scale(0.5, 0.5);
-  q.strokeStyle = '#303030';
-  drawSerpentGlyph(q, S, 0.9 * f);
-  q.restore();
-
   // 가장자리로 갈수록 어둡게
   const vg = g.createRadialGradient(c, c, c * 0.74, c, c, c);
   vg.addColorStop(0, 'rgba(2,5,14,0)');
@@ -386,10 +270,6 @@ function makePondFloor(rand: () => number): PondFloor {
   // 발광층
   const w = glw.g;
   w.clearRect(0, 0, Sg, Sg);
-  w.shadowColor = '#46d0ee';
-  w.shadowBlur = 12;
-  w.strokeStyle = '#7fe8f4';
-  drawSerpentGlyph(w, Sg, 0.9);
 
   // 높이(R) + 거칠기(G) 를 한 장에 합친다
   const hd = b.getImageData(0, 0, S2, S2);
@@ -1124,9 +1004,9 @@ export class Pond {
     r.on = true;
     r.t = 0;
     r.dur = 1.1 + size * 0.45;
-    r.r0 = 0.25 + size * 0.15;
-    r.r1 = 1.1 + size * 1.9;
-    r.a = Math.min(0.85, strength);
+    r.r0 = (0.25 + size * 0.15) * 0.75;
+    r.r1 = (1.1 + size * 1.9) * 0.75;
+    r.a = Math.min(0.4, strength * 0.5); // 더 투명하게
     r.mesh.position.set(x, Math.hypot(x, z) < R + 0.3 ? 0.03 : WATER_Y + 0.05, z);
     r.mesh.visible = true;
   }
