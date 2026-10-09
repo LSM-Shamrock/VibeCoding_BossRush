@@ -74,6 +74,8 @@ export class Dragon implements Boss {
   speed = 0;
   /** 켜면 몸통(머리 · 마디)에 닿은 플레이어가 피해를 입는다 (저공 돌진 · 추락) */
   strikeOn = false;
+  private bodyHitCd = 0;
+  private lastDt = 0;
   currentAttack: AttackName | null = null;
   /** 선회 고도/반경을 잠깐 바꾼다 (유성우) */
   cruiseOverride: { alt: number; radius: number } | null = null;
@@ -170,6 +172,7 @@ export class Dragon implements Boss {
     r.stunned = false;
     r.armPose = 'tuck';
     r.legPose = 'trail';
+    r.legGait = false;
     r.undulate = 0.6;
     this.setWings({ hz: 0.7, amp: 0.5, fold: 0, raise: 0.1, spread: 1 });
     this.look('off');
@@ -276,6 +279,7 @@ export class Dragon implements Boss {
     this.updateBreath(dt);
     this.syncRig(dt);
     this.rig.update(dt);
+    this.lastDt = dt;
     this.updateStrike();
     this.updateAmbient(dt);
     if (this.alive) this.lockPos.set(this.rig.headSphere.x, this.rig.headSphere.y, this.rig.headSphere.z);
@@ -540,15 +544,17 @@ export class Dragon implements Boss {
     }
   }
 
-  /** 몸통에 닿은 플레이어 (저공 돌진 · 추락) */
+  /** 몸통에 닿은 플레이어: 머리든 몸통이든 플레이어가 닿는 높이로 지나가면 피해 (돌진 · 추락 · 몸통이 끌려오는 구간 포함).
+   *  쓰러져 바닥에 누운 몸은 벽처럼 막기만 하고 피해는 주지 않는다 */
   private updateStrike() {
-    if (!this.strikeOn || this.player.dead) return;
+    this.bodyHitCd = Math.max(0, this.bodyHitCd - this.lastDt);
+    if (this.bodyHitCd > 0 || this.player.dead || !this.alive || this.dying > 0 || this.state === 'enter' || this.rig.lying) return;
     const pl = this.player.pos;
     for (const s of this.rig.parts) {
       if (s.kind === 'wing') continue;
       const R = s.r * 0.9 + 0.35;
-      if (Math.hypot(pl.x - s.x, pl.z - s.z) < R && Math.abs(s.y - 0.9) < s.r * 0.9 + 0.9) {
-        this.player.takeDamage(s.x, s.z);
+      if (Math.hypot(pl.x - s.x, pl.z - s.z) < R && Math.abs(s.y - 0.9) < s.r + 1.2) {
+        if (this.player.takeDamage(s.x, s.z)) this.bodyHitCd = 2.4; // 긴 몸통이 한 번 훑는 동안 연달아 맞지 않게
         return;
       }
     }

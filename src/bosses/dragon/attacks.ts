@@ -157,7 +157,7 @@ function strafe(s: Dragon): AttackScript {
         s.rig.jaw = 0.4;
         s.rig.fire = 0.6;
         s.setWings({ hz: 1.1, amp: 0.7, fold: 0 });
-        s.rig.armPose = 'tuck'; s.rig.legPose = 'trail';
+        s.rig.armPose = 'reach'; s.rig.legPose = 'trail';
         s.fly([new V3(A.x - ux * 8, 16, A.z - uz * 8), new V3(A.x + ux * 10, 13, A.z + uz * 10)], tell * 0.98, 'io');
         void B;
       },
@@ -170,7 +170,7 @@ function strafe(s: Dragon): AttackScript {
         s.rig.jaw = 1;
         s.rig.fire = 1;
         s.setWings({ fold: 0.4, hz: 1.5, amp: 0.3 });
-        s.rig.armPose = 'tuck'; s.rig.legPose = 'trail';
+        s.rig.armPose = 'reach'; s.rig.legPose = 'trail';
         s.startJet(C.burnLife);
         s.host.sfx.flame(runDur, 1);
         s.host.shake(0.5, 0.3);
@@ -180,6 +180,7 @@ function strafe(s: Dragon): AttackScript {
           'lin',
           () => {
             s.stopJet();
+            s.rig.armPose = 'tuck';
             s.rig.jaw = 0.1;
             s.rig.fire = 0;
             s.setWings({ fold: 0, hz: 1.0, amp: 0.6 });
@@ -193,7 +194,7 @@ function strafe(s: Dragon): AttackScript {
 }
 
 /* ───────────────────────── 저공 돌진 ─────────────────────────
- * 굵은 붉은 띠 → 용이 날개를 접고 플레이어가 겨우 닿을 높이(머리 중심 약 4.6)로 날아온다. 머리와 길게 끌리는 몸통이 띠를 쓸고 지나간다.
+ * 굵은 붉은 띠 → 용이 날개를 접고 플레이어가 겨우 닿을 높이(머리 중심 약 5.4)로 날아온다. 머리와 길게 끌리는 몸통이 띠를 쓸고 지나간다.
  */
 function swoop(s: Dragon): AttackScript {
   const ph = s.phaseIndex;
@@ -235,16 +236,18 @@ function swoop(s: Dragon): AttackScript {
         s.strikeOn = true;
         s.look('off');
         s.rig.jaw = 1;
-        s.rig.armPose = 'rake'; s.rig.legPose = 'dive';
+        s.rig.armPose = 'reach'; s.rig.legPose = 'dive'; s.rig.legGait = true; s.rig.gaitHz = 2.1;
         s.setWings({ fold: 0.95, hz: 0.1, amp: 0.1 });
         s.host.sfx.leap();
         s.host.shake(0.6, 0.4);
         s.fly(
-          [new V3(A.x + ux * 24, 8, A.z + uz * 24), new V3(A.x + ux * 38, 4.6, A.z + uz * 38), new V3(B.x - ux * 18, 4.6, B.z - uz * 18), new V3(B.x + ux * 4, 8.5, B.z + uz * 4), new V3(B.x + ux * 24, 19, B.z + uz * 24)],
+          [new V3(A.x + ux * 24, 9, A.z + uz * 24), new V3(A.x + ux * 38, 5.4, A.z + uz * 38), new V3(B.x - ux * 18, 5.4, B.z - uz * 18), new V3(B.x + ux * 4, 9.5, B.z + uz * 4), new V3(B.x + ux * 24, 20, B.z + uz * 24)],
           runDur,
           'lin',
           () => {
             s.strikeOn = false;
+            s.rig.legGait = false;
+            s.rig.armPose = 'tuck'; s.rig.legPose = 'trail';
             s.rig.jaw = 0.1;
             s.setWings({ fold: 0, hz: 1.2, amp: 0.8 });
           },

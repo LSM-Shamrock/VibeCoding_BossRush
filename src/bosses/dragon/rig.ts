@@ -309,6 +309,10 @@ export class DragonRig {
   /** 팔 · 다리 포즈 (동작마다 정해 주면 스프링으로 팍 자리잡는다) */
   armPose: ArmPose = 'tuck';
   legPose: LegPose = 'trail';
+  /** 뒷다리 달리기(돌진) */
+  legGait = false;
+  gaitHz = 2.0;
+  private gaitPh = 0;
   /** (이전 호환용, 쓰지 않는다) */
   tuck = 0.4;
   readonly parts: DragonPart[] = [];
@@ -1331,7 +1335,9 @@ export class DragonRig {
   /** 팔다리: 동작에 맞는 포즈로 스프링을 통해 팍 자리잡는다 */
   private updateLimbs(dt: number) {
     const lie = this.lyingK > 0 || this.curStun > 0.5;
+    if (this.legGait) this.gaitPh = (this.gaitPh + dt * this.gaitHz) % 1;
     for (const { ring, limb } of this.limbs) {
+      limb.setGait(this.legGait && !lie, this.gaitPh);
       limb.setPose(limb.fore ? (lie ? 'lie' : this.armPose) : (lie ? 'lie' : this.legPose));
       this.lf.c = this.Pout[ring];
       this.lf.R = this.Rv[ring];

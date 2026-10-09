@@ -57,6 +57,17 @@ const LEG: Record<LegPose, PoseSpec> = {
   lie: { u: [0.95, -0.35, -0.1], f: [0.65, -0.75, -0.1], h: [0.12, -0.2, 0.97], spread: 0.7, curl: 0.2, stiff: 90 },
 };
 
+/**
+ * 뒷다리 달리기(네 발 짐승의 질주) 4단계: ① 앞으로 뻗어 닿기 → ② 몸 아래로 버티기 → ③ 뒤로 박차기 → ④ 접어 들어 올려 되돌리기.
+ * 위상(0~1)에 따라 이 네 포즈 사이를 코사인으로 부드럽게 오간다.
+ */
+const GAIT: PoseSpec[] = [
+  { u: [0.32, -0.42, 0.82], f: [0.12, -0.86, 0.3], h: [0.04, -0.3, 0.95], spread: 0.95, curl: 0.12 },
+  { u: [0.3, -0.72, 0.18], f: [0.1, -0.92, -0.3], h: [0.04, -0.42, 0.9], spread: 0.85, curl: 0.15 },
+  { u: [0.36, -0.5, -0.72], f: [0.1, -0.45, -0.9], h: [0.04, -0.8, -0.55], spread: 0.55, curl: 0.5 },
+  { u: [0.42, -0.28, 0.25], f: [0.2, -0.7, -0.62], h: [0.0, -0.62, 0.7], spread: 0.4, curl: 0.75 },
+];
+
 /** 모델이 공유하는 지오메트리 · 재질 묶음 (리그가 만들고 정리한다) */
 export interface LimbKit {
   seg: THREE.BufferGeometry; // 육각 절두체 (+y, 아래가 굵다)
@@ -112,6 +123,9 @@ export class DragonLimb {
   private cur = new Float32Array(NP);
   private vel = new Float32Array(NP);
   private stiff = 120;
+  private gaitOn = false;
+  private gaitPhase = 0;
+  private gaitKeys: Float32Array[] = [];
   private name = '';
   private meshes: THREE.Mesh[] = [];
 
@@ -171,7 +185,20 @@ export class DragonLimb {
       this.toeSeg.push([0, 1, 2].map(() => add(kit.seg, kit.dark)));
       this.claws.push(add(kit.claw, kit.horn));
     }
+    for (const g of GAIT) {
+      const arr = new Float32Array(NP);
+      packPose(g, arr, side);
+      this.gaitKeys.push(arr);
+    }
     this.setPose(f ? 'tuck' : 'trail', true);
+  }
+
+  /** 달리기 모드: 뒷다리가 위상에 맞춰 네 발 짐승처럼 구른다 */
+  setGait(on: boolean, phase: number) {
+    if (this.fore) return;
+    if (!on && this.gaitOn) this.name = ''; // 끝나면 원래 포즈를 다시 적용
+    this.gaitOn = on;
+    this.gaitPhase = phase;
   }
 
   setPose(name: ArmPose | LegPose, snap = false) {
@@ -189,6 +216,17 @@ export class DragonLimb {
 
   /** 포즈 스프링을 풀고 관절 위치를 구해 메시를 놓는다 */
   update(dt: number, fr: LimbFrame, t: number, groundY = 0.3) {
+    if (this.gaitOn) {
+      const ph = (this.gaitPhase + (this.side < 0 ? 0.1 : 0)) % 1;
+      const x = ph * 4;
+      const i0 = Math.floor(x) % 4;
+      const i1 = (i0 + 1) % 4;
+      const w = 0.5 - 0.5 * Math.cos(Math.PI * (x - Math.floor(x)));
+      const A = this.gaitKeys[i0];
+      const B = this.gaitKeys[i1];
+      for (let i = 0; i < NP; i++) this.target[i] = A[i] + (B[i] - A[i]) * w;
+      this.stiff = 320;
+    }
     // 스프링 (약간 덜 감쇠 → 팍 하고 자리잡으며 살짝 되튄다)
     const k = this.stiff;
     const c = 2 * 0.74 * Math.sqrt(k);
