@@ -439,6 +439,7 @@ class Game implements Host {
       this.player.arrows.update(dt);
       this.boss?.update(dt);
       this.bossFlames(dt);
+      this.updateRipples(dt);
       this.hud.setTint(this.boss && this.boss.alive ? (this.boss.screenTint ?? 0) : 0);
       this.updateFlow(raw, dt);
     } else if (this.paused) {
@@ -684,6 +685,31 @@ class Game implements Host {
     this.camera.position.set(cx, cy, cz);
     this.camPos.set(cx, cy, cz);
     this.camera.lookAt(cx + dx * 10, cy + dy * 10, cz + dz * 10);
+  }
+
+  private lastFoot = new THREE.Vector2(1e9, 1e9);
+  private footAcc = 0;
+  private footSide = 1;
+  /** 2층: 플레이어 발걸음/대시와 이무기가 지나간 자리에 물결 */
+  private updateRipples(dt: number) {
+    if (this.floor < 2 || dt <= 0) return;
+    const p = this.player;
+    if (!p.dead) {
+      const d = Math.hypot(p.pos.x - this.lastFoot.x, p.pos.z - this.lastFoot.y);
+      if (d < 3) {
+        this.footAcc += d;
+        const dash = p.dashT > 0;
+        const step = dash ? 0.55 : 0.95;
+        if (this.footAcc >= step) {
+          this.footAcc = 0;
+          this.footSide = -this.footSide;
+          this.arena.ripple(p.pos.x + this.footSide * 0.22, p.pos.z, dash ? 1.5 : 0.55, dash ? 0.6 : 0.4);
+        }
+      }
+    }
+    this.lastFoot.set(p.pos.x, p.pos.z);
+    const b = this.boss;
+    if (b && b.alive && b.wake) b.wake((x, z, size, strength) => this.arena.ripple(x, z, size, strength));
   }
 
   private updateCrosshair() {

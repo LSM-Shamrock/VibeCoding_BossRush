@@ -86,6 +86,8 @@ export interface Boss extends Target, BossInfo {
   readonly attackNames: readonly string[];
   onDeath: () => void;
   update(dt: number): void;
+  /** 땅/물 위를 지나가는 몸이 남기는 물결: 지나간 자리마다 emit(x, z, 크기, 세기) 를 부른다 (2층) */
+  wake?(emit: (x: number, z: number, size: number, strength: number) => void): void;
   dispose(): void;
   forceAttack(name: string): void;
   setHpFrac(f: number): void;

@@ -729,6 +729,11 @@ export class Arena {
   /**
    * focus: 지금 보고 있는 중심(플레이어). 2층은 석단이 넓어서 그림자 범위와 석등 빛이 플레이어를 따라다닌다.
    */
+  /** 2층: (x,z) 에 물결 하나 (발걸음, 이무기 몸이 지나간 자리) */
+  ripple(x: number, z: number, size = 1, strength = 0.5) {
+    if (this.theme === 2) this.pond?.ripple(x, z, size, strength);
+  }
+
   update(dt: number, t: number, fx = 0, fz = 0) {
     if (this.theme === 2) {
       // 그림자 텍스처가 일렁이지 않도록 한 칸(≈0.04) 단위로 끊어서 따라간다

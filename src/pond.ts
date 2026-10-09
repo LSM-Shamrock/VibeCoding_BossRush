@@ -600,6 +600,27 @@ interface Wisp {
   ph: Float32Array;
 }
 
+/** 물결 고리 무늬: 바깥으로 갈수록 옅어지는 겹 고리 두 줄 */
+function makeRippleRingTex(): THREE.CanvasTexture {
+  const S = 128;
+  const { cv, g } = canvas(S);
+  const c = S / 2;
+  const gr = g.createRadialGradient(c, c, 0, c, c, c);
+  gr.addColorStop(0, 'rgba(255,255,255,0)');
+  gr.addColorStop(0.5, 'rgba(255,255,255,0)');
+  gr.addColorStop(0.62, 'rgba(255,255,255,0.45)');
+  gr.addColorStop(0.7, 'rgba(255,255,255,0)');
+  gr.addColorStop(0.8, 'rgba(255,255,255,0)');
+  gr.addColorStop(0.89, 'rgba(255,255,255,0.95)');
+  gr.addColorStop(0.97, 'rgba(255,255,255,0)');
+  gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr;
+  g.fillRect(0, 0, S, S);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 /** 태풍 하늘: 가로로 길게 흐르는 잿빛 먹구름 (좌우로 이어 붙는 노이즈). 위쪽은 어둡고 지평선 쪽은 옅은 회색빛 */
 function makeStormSkyTex(rand: () => number): THREE.CanvasTexture {
   const W = 512;
@@ -703,6 +724,11 @@ export class Pond {
   private lotus: THREE.MeshBasicMaterial;
   private foam: THREE.MeshBasicMaterial;
   private rings: { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; ph: number }[] = [];
+  /** 석단 위에 고인 얕은 물 (살짝 비치고 물결이 일렁인다) */
+  private shallowTex: THREE.Texture;
+  /** 발걸음/이무기 몸이 만드는 물결 고리 */
+  private ripples: { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; t: number; dur: number; r0: number; r1: number; a: number; on: boolean }[] = [];
+  private rippleBudget = 0;
 
   constructor(scene: THREE.Scene, renderer: THREE.WebGLRenderer | null) {
     const rand = mulberry32(777);
@@ -748,6 +774,38 @@ export class Pond {
     const glow = new THREE.Mesh(new THREE.CircleGeometry(R, 96).rotateX(-Math.PI / 2), this.floorGlow);
     glow.position.y = 0.012;
     root.add(glow);
+
+    // 석단 위에도 물이 얕게 고여 있다: 돌바닥이 비쳐 보이는 반투명 수면 (텔레그래프/장판은 이보다 위에 그려진다)
+    this.shallowTex = this.rippleTex.clone();
+    this.shallowTex.needsUpdate = true;
+    this.shallowTex.repeat.set(R / 6, R / 6);
+    const shallowMat = new THREE.MeshStandardMaterial({
+      color: 0x1d4f88,
+      transparent: true,
+      opacity: 0.36,
+      roughness: 0.05,
+      metalness: 0.2,
+      normalMap: this.shallowTex,
+      normalScale: new THREE.Vector2(0.4, 0.4),
+      envMap: env,
+      envMapIntensity: 1.5,
+      depthWrite: false,
+    });
+    const shallow = new THREE.Mesh(new THREE.CircleGeometry(R, 96).rotateX(-Math.PI / 2), shallowMat);
+    shallow.position.y = 0.02;
+    root.add(shallow);
+
+    // 물결 고리 풀
+    const rtex = makeRippleRingTex();
+    const rgeo = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2);
+    for (let i = 0; i < 140; i++) {
+      const mat = new THREE.MeshBasicMaterial({ map: rtex, color: 0xa8cfff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+      const mesh = new THREE.Mesh(rgeo, mat);
+      mesh.visible = false;
+      mesh.renderOrder = 2;
+      root.add(mesh);
+      this.ripples.push({ mesh, mat, t: 0, dur: 1, r0: 0.3, r1: 2, a: 0.5, on: false });
+    }
 
     const wallTex = makeWallTex(rand);
     wallTex.repeat.set(Math.round(22 * K), 1);
@@ -1054,7 +1112,42 @@ export class Pond {
     wisp(Math.round(220 * K * 1.6), 0x9db8ff, 0.07, 0.32, R + 6, 11);
   }
 
+  /**
+   * (x,z) 에서 번져 나가는 물결 하나. size = 최종 반지름 기준 크기, strength 0~1.
+   * 석단 안쪽이면 석단 위 얕은 물에, 바깥이면 못 수면에 그린다. 한꺼번에 너무 많이 쏟아지면 일부는 버린다.
+   */
+  ripple(x: number, z: number, size = 1, strength = 0.5) {
+    if (this.rippleBudget < 1) return;
+    const r = this.ripples.find((q) => !q.on);
+    if (!r) return;
+    this.rippleBudget -= 1;
+    r.on = true;
+    r.t = 0;
+    r.dur = 1.1 + size * 0.45;
+    r.r0 = 0.25 + size * 0.15;
+    r.r1 = 1.1 + size * 1.9;
+    r.a = Math.min(0.85, strength);
+    r.mesh.position.set(x, Math.hypot(x, z) < R + 0.3 ? 0.03 : WATER_Y + 0.05, z);
+    r.mesh.visible = true;
+  }
+
   update(dt: number, t: number, fx = 0, fz = 0) {
+    this.rippleBudget = Math.min(8, this.rippleBudget + dt * 70);
+    this.shallowTex.offset.x -= dt * 0.012;
+    this.shallowTex.offset.y += dt * 0.007;
+    for (const r of this.ripples) {
+      if (!r.on) continue;
+      r.t += dt;
+      const k = r.t / r.dur;
+      if (k >= 1) {
+        r.on = false;
+        r.mesh.visible = false;
+        continue;
+      }
+      const e = 1 - (1 - k) * (1 - k);
+      r.mesh.scale.setScalar(r.r0 + (r.r1 - r.r0) * e);
+      r.mat.opacity = r.a * Math.pow(1 - k, 1.4) * Math.min(1, k * 10);
+    }
     this.skyTex.offset.x += dt * 0.0035;
     // 먼 번개: 구름 속이 두 번 깜빡인다
     this.flashT -= dt;

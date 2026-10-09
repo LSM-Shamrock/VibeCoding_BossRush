@@ -98,6 +98,7 @@ export class Serpent implements Boss {
   private wrapping = false;
   /** 몸통 접촉 시간 (몸에 닿아 있는 동안 쌓인다) / 화면 보라색 강도 */
   private contactT = 0;
+  private wakeLast = new Map<number, [number, number]>();
   screenTint = 0;
   private pending: AttackName = 'lunge';
   private script: AttackScript | null = null;
@@ -324,6 +325,37 @@ export class Serpent implements Boss {
     // 보랏빛은 체력이 깎이기까지의 시간보다 1.5배 빠르게 짙어진다
     const goal = touching ? 0.35 + 0.65 * Math.min(1, (this.contactT * TINT_SPEED) / S.contact.hurtAfter) : 0;
     this.screenTint += (goal - this.screenTint) * (1 - Math.exp(-(goal > this.screenTint ? 8 * TINT_SPEED : 3) * dt));
+  }
+
+  /** 머리와 몸 군데군데가 땅(물)을 스치며 남기는 물결 */
+  wake(emit: (x: number, z: number, size: number, strength: number) => void) {
+    if (this.state === 'enter' && this.rig.underground) return;
+    const segs = this.rig.segs;
+    const test = (key: number, x: number, y: number, z: number, r: number, gap: number, head: boolean) => {
+      if (y > r + 1.3) {
+        this.wakeLast.delete(key);
+        return;
+      }
+      const last = this.wakeLast.get(key);
+      if (!last) {
+        this.wakeLast.set(key, [x, z]);
+        return;
+      }
+      if (Math.hypot(x - last[0], z - last[1]) < gap) return;
+      last[0] = x;
+      last[1] = z;
+      emit(x, z, 0.8 + r * 0.9, head ? 0.6 : 0.42);
+    };
+    const p = this.rig.pos;
+    test(-1, p.x, this.rig.currentLift * 0.4, p.z, 2.2, 4.5, true);
+    for (let i = 4; i < segs.length; i += 9) {
+      const sg = segs[i];
+      if (!sg.up || sg.r < 0.7) {
+        this.wakeLast.delete(i);
+        continue;
+      }
+      test(i, sg.x, sg.y, sg.z, sg.r, 5.5 + sg.r, false);
+    }
   }
 
   /** 속도/이동을 위치로 옮기고 머리 방향·충돌 판정을 갱신한다 */
