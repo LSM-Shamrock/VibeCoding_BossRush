@@ -182,7 +182,7 @@ export class Arrows {
     const dmg = a.damage * F.splashMult;
     for (const t of this.host.targets) {
       if (!t.alive || t === hitTarget) continue;
-      const dealt = t.hitSplash(p.x, p.z, R, dmg);
+      const dealt = t.hitSplash(p.x, p.z, R, dmg, p.y);
       if (dealt > 0) this.onDealt(dealt);
     }
   }

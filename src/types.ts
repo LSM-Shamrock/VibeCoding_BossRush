@@ -18,7 +18,7 @@ export interface Target {
   /** 범위 공격(특수기) 판정 */
   hitRadial(c: THREE.Vector3, radius: number, dmg: number): void;
   /** 불꽃 범위 피해(풀차징 스플래시 / 불꽃 장판). 바닥 위 (x,z) 원과 겹치면 피해를 주고 준 피해를 돌려준다 (겹치지 않으면 0) */
-  hitSplash(x: number, z: number, r: number, dmg: number): number;
+  hitSplash(x: number, z: number, r: number, dmg: number, y?: number): number;
   /** 플레이어가 통과하지 못하는 몸통 원들 (없으면 빈 배열) */
   bodies(): Circle[];
 }
@@ -122,4 +122,6 @@ export interface Host {
   banner(title: string, sub: string, seconds: number): void;
   /** 화면 전체를 color 로 번쩍였다가 seconds 동안 사라지게 한다 (포효 등) */
   flash(color: string, alpha: number, seconds: number): void;
+  /** 3층: 하늘이 번쩍 (선택) */
+  skyPulse?(k: number): void;
 }

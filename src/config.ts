@@ -7,6 +7,8 @@ export const CFG = {
   arena: { radius: 18, playerLimit: 17.3, pillars: 16, pillarR: 27 },
   // 2층 연못 석단: 반경 약 1.33배(18→24). 뱀이 몸을 펴고 돌아다닐 수 있는 넓이 (spawnZ = 플레이어 시작 z)
   pond: { radius: 24, spawnZ: 10.8 },
+  // 3층 용의 화산 제단: 용암 호수 위에 뜬 현무암 제단. 용(몸길이 ≈ 50, 날개폭 ≈ 45)은 하늘을 선회하므로 아레나는 반경만 넓다
+  peak: { radius: 24, spawnZ: 11 },
 
   // 플레이어와 보스를 함께 화면에 담도록: 초점 = 플레이어×followRatio + 보스×bossRatio
   // 어깨 너머 3인칭: 플레이어 뒤·위에서 바라본다. 마우스로 시점(좌우/상하)을 돌린다.
@@ -16,7 +18,7 @@ export const CFG = {
     pivotY: 2.3, // 피벗 높이 (머리 높이쯤)
     shoulder: 0.75, // 오른쪽 어깨 쪽으로 치우친 정도
     pitchDeg: 6, // 기본 내려다보는 각도 (+ = 아래)
-    pitchMin: -38, // 가장 높이 올려다보는 각도 (음수 = 위)
+    pitchMin: -62, // 가장 높이 올려다보는 각도 (음수 = 위)
     pitchMax: 68, // 52°에서는 발치 1.8칸 안쪽 바닥을 조준할 수 없었다 (새끼 거미가 붙었을 때)
     sens: 0.0022, // 마우스 감도 (라디안/픽셀)
     lockSmooth: 7, // 락온 시 카메라가 보스를 따라 도는 속도
@@ -201,5 +203,46 @@ export const CFG = {
     roar: 2.6, // 페이즈 전환 포효 (이 동안 무적)
   },
 
-  fx: { maxParticles: 700 },
+  /**
+   * 보스 3 — 겁화의 용 (마지막 보스). 하늘을 선회하며 싸운다. 배열 값은 [페이즈1, 페이즈2, 페이즈3].
+   * 예고(tell)가 보이는 시간은 (시간 × 달리기 7.2) > 반경 + 0.32 가 되게 잡아 달리기만으로 피할 수 있다. 대시는 충격파 · 광선 추격용.
+   */
+  dragon: {
+    name: '겁화의 용',
+    floorLabel: '3층 · 용의 화산',
+    maxHp: 1500,
+    phaseAt: [0.67, 0.34],
+    headMult: 1.5, // 머리 피해 배율
+    bodyMult: 0.7, // 몸통
+    wingMult: 0.5, // 날개
+    exposedMult: 3, // 추락해 쓰러진 동안 머리 피해 배율
+
+    // 평소 비행: 플레이어 쪽으로 치우친 중심 둘레를 원을 그리며 선회한다 (몸통이 그 궤적을 따라 휘감긴다)
+    cruise: { radius: [24, 21, 18], alt: [17, 16, 15], speed: [15, 18, 21], turn: [0.95, 1.15, 1.35], follow: 0.45 },
+    idle: [1.7, 1.2, 0.85],
+
+    sequence: [
+      ['spit', 'strafe', 'swoop', 'spit', 'strafe', 'swoop'],
+      ['meteor', 'strafe', 'crash', 'spit', 'swoop', 'meteor', 'strafe', 'crash'],
+      ['sunray', 'gale', 'strafe', 'crash', 'meteor', 'sunray', 'swoop', 'gale', 'spit', 'crash'],
+    ],
+
+    // 화염탄: 입에 불을 모았다가 불덩이를 연달아 던진다. 착지 고리가 차오른다. (페이즈 2~: 바닥에 불이 남는다)
+    spit: { windup: [1.0, 0.85, 0.7], count: [3, 4, 5], gap: 0.34, flight: 1.2, peak: 9, radius: 2.9, zone: [0, 5, 6], spread: 4.6, recover: 0.9 },
+    // 화염 숨결 통과: 바닥에 긴 예고선 → 용이 선을 따라 낮게 날며 불을 뿜는다. 지나간 자리는 한동안 불탄다
+    strafe: { tell: [1.55, 1.4, 1.25], width: 5.2, speed: [34, 38, 42], passes: [1, 2, 2], burnR: 2.7, burnLife: 2.6 },
+    // 저공 돌진: 굵은 예고선 → 땅 위를 스치듯 날아오며 머리와 몸통으로 쓸어버린다
+    swoop: { tell: [1.2, 1.05, 0.95], width: 6.8, speed: [44, 48, 52], passes: [1, 1, 2] },
+    // 유성우 (페이즈 2~): 용이 하늘 높이 올라 포효하면 불타는 유성이 쏟아진다
+    meteor: { count: [0, 8, 12], gap: [0.3, 0.3, 0.22], tell: 1.35, radius: 3.1, zone: [0, 0, 4] },
+    // 추락 강타 (페이즈 2~): 하늘에서 표적 위로 내리꽂아 충격파를 일으키고, 쓰러져 약점이 드러난다
+    crash: { tell: [1.7, 1.7, 1.5], radius: 7.0, stun: [3.6, 3.6, 3.0], wave: 18 },
+    // 태양 광선 (페이즈 3): 입가에 태양을 모아 쏜다. 광선의 조준점이 플레이어를 끈질기게 쫓는다
+    sunray: { charge: 2.3, dur: 4.4, chase: 7.3, radius: 2.4, lock: 1.0 },
+    // 날개 충격파 (페이즈 3): 제단 위에서 날개를 내리칠 때마다 땅을 훑는 불꽃 고리가 퍼진다
+    gale: { beats: 3, gap: 1.4, tell: 0.85, speed: 14, width: 1.5, radius: 3.8 },
+    roar: 3.0, // 페이즈 전환 포효 (이 동안 무적)
+  },
+
+  fx: { maxParticles: 1200 },
 } as const;

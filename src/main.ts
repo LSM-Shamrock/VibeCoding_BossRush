@@ -11,6 +11,7 @@ import { Fx } from './fx';
 import { Arena } from './arena';
 import { Player } from './player';
 import { Spider } from './bosses/spider/spider';
+import { Dragon } from './bosses/dragon/dragon';
 import { Serpent } from './bosses/serpent/serpent';
 import { Hud } from './hud';
 import { Keybinds } from './keybinds';
@@ -33,7 +34,7 @@ const lerpAngle = (a: number, b: number, t: number) => {
 };
 const clampN = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 /** 층마다 나오는 보스. 새 보스는 여기에 한 줄 추가하면 된다 (인덱스 + 1 = 층 번호) */
-const BOSSES: Array<(host: Host, player: Player, drop: boolean) => Boss> = [(h, p, d) => new Spider(h, p, d), (h, p, d) => new Serpent(h, p, d)];
+const BOSSES: Array<(host: Host, player: Player, drop: boolean) => Boss> = [(h, p, d) => new Spider(h, p, d), (h, p, d) => new Serpent(h, p, d), (h, p, d) => new Dragon(h, p, d)];
 const FLOORS = BOSSES.length;
 /** 1층 기록은 예전 키를 그대로 쓴다 */
 const bestKey = (floor: number) => (floor === 1 ? 'deepnest.best.spider' : `deepnest.best.f${floor}`);
@@ -42,6 +43,7 @@ const bestKey = (floor: number) => (floor === 1 ? 'deepnest.best.spider' : `deep
 const FLOOR_INFO = [
   { label: '1층 · 거미굴', name: CFG.spider.name },
   { label: CFG.serpent.floorLabel, name: CFG.serpent.name },
+  { label: CFG.dragon.floorLabel, name: CFG.dragon.name },
 ];
 /** 클리어 화면에서 캐릭터가 움직이지 못하게 하는 빈 입력 */
 const IDLE_INPUT = new Proxy({}, { get: () => () => false }) as unknown as Input;
@@ -218,6 +220,9 @@ class Game implements Host {
   flash(color: string, alpha: number, seconds: number) {
     this.hud.flash(color, alpha, seconds);
   }
+  skyPulse(k: number) {
+    this.arena.skyPulse(k);
+  }
 
   /** 페이즈가 오르면 보스 몸에서 불꽃이 이글거린다: 2페이즈 = 붉은 불꽃, 3페이즈 = 검붉고 더 거센 불꽃 */
   private flameT = 0;
@@ -298,7 +303,7 @@ class Game implements Host {
     this.hud.showOverlay(
       info.label,
       `<span style="font-size:22px;letter-spacing:.2em"><b>${info.name}</b></span><br>
-       <span style="color:#a8957c">${more ? '더 깊은 곳의 보스가 기다립니다. 체력은 가득 채워집니다.' : '다음 층의 보스(용)는 준비 중입니다. 같은 보스에게 다시 도전합니다.'}</span><br>
+       <span style="color:#a8957c">${more ? '더 깊은 곳의 보스가 기다립니다. 체력은 가득 채워집니다.' : '마지막 층까지 모두 정복했습니다. 같은 보스에게 다시 도전합니다.'}</span><br>
        ${this.diffPicker()}
        <button type="button" class="startbtn">시작</button>`,
     );
@@ -795,7 +800,7 @@ class Game implements Host {
   private footSide = 1;
   /** 2층: 플레이어 발걸음/대시와 이무기가 지나간 자리에 물결 */
   private updateRipples(dt: number) {
-    if (this.floor < 2 || dt <= 0) return;
+    if (this.floor !== 2 || dt <= 0) return;
     const p = this.player;
     if (!p.dead) {
       const d = Math.hypot(p.pos.x - this.lastFoot.x, p.pos.z - this.lastFoot.y);

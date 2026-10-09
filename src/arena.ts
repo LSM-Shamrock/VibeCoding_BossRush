@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { CFG } from './config';
 import { PAL } from './palette';
 import { Pond, POND } from './pond';
+import { Volcano, VOLC } from './volcano';
 import { setWorldFloor } from './world';
 
 const TAU = Math.PI * 2;
@@ -403,6 +404,8 @@ export class Arena {
   private f1 = new THREE.Group();
   /** 2층(이무기의 못). 처음 들어갈 때 만든다 */
   private pond: Pond | null = null;
+  /** 3층(용의 화산 제단) */
+  private volcano: Volcano | null = null;
   private theme = 1;
 
   constructor(scene: THREE.Scene, private renderer: THREE.WebGLRenderer | null = null) {
@@ -696,34 +699,45 @@ export class Arena {
    *  2층(이무기의 못): 군청빛 한밤의 못 위에 뜬 둥근 석단 — 청백색 석등, 도깨비불, 달문 (pond.ts)
    */
   setTheme(floor: number) {
-    const f2 = floor >= 2;
+    const th = floor >= 3 ? 3 : floor >= 2 ? 2 : 1;
     setWorldFloor(floor);
     const sc = this.sun.shadow.camera;
-    const ext = f2 ? 40 : 24;
+    const ext = th === 1 ? 24 : 40;
     sc.left = -ext;
     sc.right = ext;
     sc.top = ext;
     sc.bottom = -ext;
-    sc.far = f2 ? 90 : 60;
+    sc.far = th === 1 ? 60 : 90;
     sc.updateProjectionMatrix();
-    if (f2 && !this.pond) this.pond = new Pond(this.scene, this.renderer);
-    this.theme = f2 ? 2 : 1;
-    this.f1.visible = !f2;
-    if (this.pond) this.pond.group.visible = f2;
-    const fog = f2 ? POND.fog : PAL.fog;
-    (this.scene.background as THREE.Color).setHex(fog);
+    if (th === 2 && !this.pond) this.pond = new Pond(this.scene, this.renderer);
+    if (th === 3 && !this.volcano) this.volcano = new Volcano(this.scene);
+    this.theme = th;
+    this.f1.visible = th === 1;
+    if (this.pond) this.pond.group.visible = th === 2;
+    if (this.volcano) this.volcano.group.visible = th === 3;
+    const T =
+      th === 3
+        ? { fog: VOLC.fog, density: VOLC.fogDensity, sky: VOLC.hemiSky, ground: VOLC.hemiGround, hemi: VOLC.hemiIntensity, sun: VOLC.sun, sunI: VOLC.sunIntensity, sunPos: VOLC.sunPos }
+        : th === 2
+          ? { fog: POND.fog, density: POND.fogDensity, sky: POND.hemiSky, ground: POND.hemiGround, hemi: POND.hemiIntensity, sun: POND.moon, sunI: POND.moonIntensity, sunPos: POND.moonPos }
+          : { fog: PAL.fog, density: 0.012, sky: 0xc08a62, ground: 0x24120a, hemi: 0.78, sun: 0xffc690, sunI: 1.1, sunPos: [-9, 20, 7] as [number, number, number] };
+    (this.scene.background as THREE.Color).setHex(T.fog);
     const fg = this.scene.fog as THREE.FogExp2;
-    fg.color.setHex(fog);
-    fg.density = f2 ? POND.fogDensity : 0.012;
-    this.hemi.color.setHex(f2 ? POND.hemiSky : 0xc08a62);
-    this.hemi.groundColor.setHex(f2 ? POND.hemiGround : 0x24120a);
-    this.hemi.intensity = f2 ? POND.hemiIntensity : 0.78;
-    this.sun.color.setHex(f2 ? POND.moon : 0xffc690);
-    this.sun.intensity = f2 ? POND.moonIntensity : 1.1;
-    if (f2) this.sun.position.set(...POND.moonPos);
-    else this.sun.position.set(-9, 20, 7);
+    fg.color.setHex(T.fog);
+    fg.density = T.density;
+    this.hemi.color.setHex(T.sky);
+    this.hemi.groundColor.setHex(T.ground);
+    this.hemi.intensity = T.hemi;
+    this.sun.color.setHex(T.sun);
+    this.sun.intensity = T.sunI;
+    this.sun.position.set(...T.sunPos);
     this.sun.target.position.set(0, 0, 0);
     this.sun.target.updateMatrixWorld();
+  }
+
+  /** 3층: 하늘이 번쩍 (포효 · 큰 기술) */
+  skyPulse(k = 1) {
+    if (this.theme === 3) this.volcano?.pulse(k);
   }
 
   /**
@@ -735,15 +749,17 @@ export class Arena {
   }
 
   update(dt: number, t: number, fx = 0, fz = 0) {
-    if (this.theme === 2) {
+    if (this.theme >= 2) {
       // 그림자 텍스처가 일렁이지 않도록 한 칸(≈0.04) 단위로 끊어서 따라간다
       const q = 0.8;
       const sx = Math.round(fx / q) * q;
       const sz = Math.round(fz / q) * q;
-      this.sun.position.set(sx + POND.moonPos[0], POND.moonPos[1], sz + POND.moonPos[2]);
+      const sp = this.theme === 3 ? VOLC.sunPos : POND.moonPos;
+      this.sun.position.set(sx + sp[0], sp[1], sz + sp[2]);
       this.sun.target.position.set(sx, 0, sz);
       this.sun.target.updateMatrixWorld();
-      this.pond?.update(dt, t, fx, fz);
+      if (this.theme === 3) this.volcano?.update(dt, t, fx, fz);
+      else this.pond?.update(dt, t, fx, fz);
       return;
     }
     for (const d of this.drifts) {

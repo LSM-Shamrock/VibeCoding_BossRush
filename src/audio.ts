@@ -298,6 +298,29 @@ export class Sfx {
     this.noise(0.1, 0.1, 3500, 600, 'highpass');
   }
   /** 보스 사망 */
+  /** 용의 화염 숨결: 낮게 우르릉거리는 바람 소리 (len 초) */
+  flame(len = 1.2, vol = 1) {
+    this.noise(len, 0.2 * vol, 500, 1700, 'bandpass');
+    this.noise(len * 0.9, 0.12 * vol, 2600, 450, 'lowpass', 0.05);
+    this.tone(96, 58, len, 'sawtooth', 0.06 * vol);
+  }
+  /** 거대한 날갯짓 */
+  wingbeat(vol = 1) {
+    this.noise(0.3, 0.15 * vol, 520, 70, 'lowpass');
+    this.tone(64, 38, 0.28, 'sine', 0.22 * vol);
+  }
+  /** 태양 광선: 차오르는 울림(charge) / 발사 */
+  sunCharge(len = 2) {
+    this.tone(110, 520, len, 'sawtooth', 0.08);
+    this.tone(55, 260, len, 'sine', 0.25);
+    this.noise(len, 0.12, 300, 5200, 'bandpass');
+  }
+  sunFire(len = 4) {
+    this.noise(len, 0.3, 2400, 900, 'bandpass');
+    this.tone(70, 62, len, 'sawtooth', 0.14);
+    this.tone(140, 130, len, 'square', 0.05);
+    this.noise(0.6, 0.5, 3000, 80, 'lowpass');
+  }
   bossDeath() {
     this.noise(1.6, 0.5, 2500, 40);
     this.tone(140, 24, 1.6, 'sawtooth', 0.3);

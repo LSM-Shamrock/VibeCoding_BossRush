@@ -15,7 +15,13 @@ export const WORLD: { radius: number; playerLimit: number; wallLimit: number; sp
 };
 
 export function setWorldFloor(floor: number) {
-  if (floor >= 2) {
+  if (floor >= 3) {
+    const r = CFG.peak.radius;
+    WORLD.radius = r;
+    WORLD.playerLimit = r - 0.7;
+    WORLD.wallLimit = r + 2.4;
+    WORLD.spawnZ = CFG.peak.spawnZ;
+  } else if (floor >= 2) {
     const r = CFG.pond.radius;
     WORLD.radius = r;
     WORLD.playerLimit = r - 0.7;
