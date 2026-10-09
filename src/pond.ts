@@ -487,12 +487,12 @@ function makeRippleRingTex(): THREE.CanvasTexture {
   const c = S / 2;
   const gr = g.createRadialGradient(c, c, 0, c, c, c);
   gr.addColorStop(0, 'rgba(255,255,255,0)');
-  gr.addColorStop(0.5, 'rgba(255,255,255,0)');
+  gr.addColorStop(0.57, 'rgba(255,255,255,0)');
   gr.addColorStop(0.62, 'rgba(255,255,255,0.45)');
-  gr.addColorStop(0.7, 'rgba(255,255,255,0)');
-  gr.addColorStop(0.8, 'rgba(255,255,255,0)');
+  gr.addColorStop(0.67, 'rgba(255,255,255,0)');
+  gr.addColorStop(0.84, 'rgba(255,255,255,0)');
   gr.addColorStop(0.89, 'rgba(255,255,255,0.95)');
-  gr.addColorStop(0.97, 'rgba(255,255,255,0)');
+  gr.addColorStop(0.94, 'rgba(255,255,255,0)');
   gr.addColorStop(1, 'rgba(255,255,255,0)');
   g.fillStyle = gr;
   g.fillRect(0, 0, S, S);
@@ -1006,7 +1006,7 @@ export class Pond {
     r.dur = 1.1 + size * 0.45;
     r.r0 = (0.25 + size * 0.15) * 0.75;
     r.r1 = (1.1 + size * 1.9) * 0.75;
-    r.a = Math.min(0.4, strength * 0.5); // 더 투명하게
+    r.a = Math.min(0.2, strength * 0.25); // 아주 옅게
     r.mesh.position.set(x, Math.hypot(x, z) < R + 0.3 ? 0.03 : WATER_Y + 0.05, z);
     r.mesh.visible = true;
   }
