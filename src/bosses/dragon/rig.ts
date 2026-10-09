@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { envHolder } from '../../envmap';
 import { aimed, hull, merge, mirror, spike, taperedTube, type P3 } from '../../geo';
 import type { Circle, Sphere } from '../../types';
-import { DragonLimb, makeLimbKit, type ArmPose, type LegPose } from './limbs';
+import { makeLimbKit } from './limbs';
+import { DragonLegs } from './legs';
 
 const V3 = THREE.Vector3;
 type V3 = THREE.Vector3;
@@ -307,12 +308,11 @@ export class DragonRig {
   undulate = 0.6;
   wing: WingCtl = { hz: 0.7, amp: 0.55, fold: 0, raise: 0.1, spread: 1 };
   /** 팔 · 다리 포즈 (동작마다 정해 주면 스프링으로 팍 자리잡는다) */
-  armPose: ArmPose = 'tuck';
-  legPose: LegPose = 'trail';
+  armPose = 'tuck'; // (쓰지 않음: 다리는 거미식 IK 로 스스로 움직인다)
+  legPose = 'trail'; // (쓰지 않음)
   /** 뒷다리 달리기(돌진) */
   legGait = false;
   gaitHz = 2.0;
-  private gaitPh = 0;
   /** (이전 호환용, 쓰지 않는다) */
   tuck = 0.4;
   readonly parts: DragonPart[] = [];
@@ -362,7 +362,7 @@ export class DragonRig {
   private mouthLight: THREE.PointLight;
   private whiskers: THREE.Group[] = [];
   private wings: { side: number; bones: THREE.Mesh[]; cuffs: THREE.Mesh[]; joints: THREE.Mesh[]; thumb: THREE.Mesh; tipClaws: THREE.Mesh[]; panels: WingPanel[]; pts: V3[]; mids: V3[] }[] = [];
-  private limbs: { ring: number; limb: DragonLimb }[] = [];
+  private legs!: DragonLegs;
   private limbKit!: ReturnType<typeof makeLimbKit>;
   private tailBlade: THREE.Mesh;
   private boneGeo = new THREE.CylinderGeometry(0.62, 1, 1, 7, 1).translate(0, 0.5, 0);
@@ -485,7 +485,8 @@ export class DragonRig {
     this.limbKit = makeLimbKit(limbArmor, dark, horn);
     this.disposables.push(this.limbKit.seg, this.limbKit.cuff, this.limbKit.joint, this.limbKit.claw, this.limbKit.spike);
     for (const side of [1, -1]) this.buildWing(side);
-    for (const [ring, fore] of [[IFL, true], [IHL, false]] as [number, boolean][]) for (const side of [1, -1]) this.limbs.push({ ring, limb: new DragonLimb(this.group, this.limbKit, side, fore) });
+    this.legs = new DragonLegs(this.group);
+    this.disposables.push(this.legs);
     const blade = hull(mirror([[0, 0.14, 0], [0.55, 0.14, -0.6], [1.35, 0.1, -2.0], [0.5, 0.06, -3.6], [0, 0.04, -5.2], [0, -0.14, 0], [0.55, -0.14, -0.6], [1.35, -0.1, -2.0], [0.5, -0.06, -3.6]]));
     this.tailBlade = new THREE.Mesh(blade, stdMat(0x1a0d0c, 0x3a0c04, 0.5, 0.5, true));
     this.tailBlade.castShadow = true;
@@ -1332,21 +1333,22 @@ export class DragonRig {
     m.scale.set(r, L, r);
   }
 
-  /** 팔다리: 동작에 맞는 포즈로 스프링을 통해 팍 자리잡는다 */
+  /** 다리 4개: 거미 다리 메커니즘 (IK + 발걸음) */
   private updateLimbs(dt: number) {
     const lie = this.lyingK > 0 || this.curStun > 0.5;
-    if (this.legGait) this.gaitPh = (this.gaitPh + dt * this.gaitHz) % 1;
-    for (const { ring, limb } of this.limbs) {
-      limb.setGait(this.legGait && !lie, this.gaitPh);
-      limb.setPose(limb.fore ? (lie ? 'lie' : this.armPose) : (lie ? 'lie' : this.legPose));
-      this.lf.c = this.Pout[ring];
-      this.lf.R = this.Rv[ring];
-      this.lf.U = this.U[ring];
-      this.lf.T = this.T[ring];
-      this.lf.rad = RAD[ring];
-      limb.update(dt, this.lf, this.t);
-    }
+    this.lfA.c = this.Pout[IFL];
+    this.lfA.R = this.Rv[IFL];
+    this.lfA.U = this.U[IFL];
+    this.lfA.T = this.T[IFL];
+    this.lfA.rad = RAD[IFL];
+    this.lf.c = this.Pout[IHL];
+    this.lf.R = this.Rv[IHL];
+    this.lf.U = this.U[IHL];
+    this.lf.T = this.T[IHL];
+    this.lf.rad = RAD[IHL];
+    this.legs.update(dt, this.lfA, this.lf, lie);
   }
+  private lfA: { c: V3; R: V3; U: V3; T: V3; rad: number } = { c: new V3(), R: new V3(), U: new V3(), T: new V3(), rad: 1 };
   private lf: { c: V3; R: V3; U: V3; T: V3; rad: number } = { c: new V3(), R: new V3(), U: new V3(), T: new V3(), rad: 1 };
 
   private updateParts() {
