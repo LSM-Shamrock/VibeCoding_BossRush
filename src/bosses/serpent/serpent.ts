@@ -316,8 +316,9 @@ export class Serpent implements Boss {
     }
     if (touching) this.contactT += dt;
     else this.contactT = Math.max(0, this.contactT - dt * 1.5);
-    if (this.contactT >= S.contact.hurtAfter) {
-      this.contactT = S.contact.hurtAfter * 0.35;
+    // 화면의 보랏빛이 100% 에 이르렀을 때 체력이 깎인다
+    if (this.contactT * TINT_SPEED >= S.contact.hurtAfter && this.screenTint >= 0.97) {
+      this.contactT = (S.contact.hurtAfter * 0.35) / TINT_SPEED;
       pl.takeDamage(pl.pos.x + (Math.random() - 0.5), pl.pos.z + 1);
     }
     // 보랏빛은 체력이 깎이기까지의 시간보다 1.5배 빠르게 짙어진다
