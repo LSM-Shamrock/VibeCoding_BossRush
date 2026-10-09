@@ -62,7 +62,16 @@ function radiusAt(s: number) {
   return r * RS;
 }
 const RAD = new Float32Array(NR);
-for (let i = 0; i < NR; i++) RAD[i] = radiusAt(i * DS);
+/** 앞다리 ~ 뒷다리 구간의 몸통을 더 굵고 넓게 (0~1). 앞은 앞다리 직전부터 올라가고, 뒷다리 마디에서 원래 굵기(꼬리)로 돌아온다 */
+const BULK = new Float32Array(NR);
+for (let i = 0; i < NR; i++) {
+  const up = smooth((i - (IFL - 10)) / 10);
+  const down = 1 - smooth((i - (IHL - 12)) / 12);
+  BULK[i] = Math.min(up, down);
+}
+const THICK = 0.3; // 두께(반지름) 증가
+const WIDER = 0.2; // 옆으로 추가로 넓어지는 정도
+for (let i = 0; i < NR; i++) RAD[i] = radiusAt(i * DS) * (1 + THICK * BULK[i]);
 
 /* ───────────────────────── 텍스처 ───────────────────────── */
 function canvas2d(w: number, h = w) {
@@ -1044,7 +1053,7 @@ export class DragonRig {
         // 등 쪽 면은 더 높게 솟은 능선
         const top = Math.max(0, Math.sin(a) - 0.4) * (pk < 0.6 ? 1 : 0.7);
         const rv = rr * (1 + 0.2 * top);
-        const x = Math.cos(a) * rv;
+        const x = Math.cos(a) * rv * (1 + WIDER * BULK[i]);
         const y = Math.sin(a) * rv * flat;
         const v = (i * VW + j) * 3;
         pos[v] = c.x + R.x * x + U.x * y;
@@ -1068,7 +1077,8 @@ export class DragonRig {
       this.m4.makeBasis(R, this.tv, this.tv2);
       const sz = i < 14 ? 0.8 + i * 0.05 : clamp(RAD[i] * 0.6 + 0.4, 0.6, 2.7);
       this.m4.scale(this.sv.set(sz * 0.9, sz, sz));
-      this.m4.setPosition(c.x + U.x * RAD[i] * 1.12, c.y + U.y * RAD[i] * 1.12, c.z + U.z * RAD[i] * 1.12);
+      // 가시 밑면은 몸통 등 안쪽에 묻는다 (몸통과 가시 사이에 틈이 보이지 않게)
+      this.m4.setPosition(c.x + U.x * RAD[i] * 0.72, c.y + U.y * RAD[i] * 0.72, c.z + U.z * RAD[i] * 0.72);
       this.spines.setMatrixAt(k, this.m4);
     }
     this.spines.instanceMatrix.needsUpdate = true;
