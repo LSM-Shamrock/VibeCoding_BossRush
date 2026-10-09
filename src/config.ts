@@ -7,7 +7,7 @@ export const CFG = {
   arena: { radius: 18, playerLimit: 17.3, pillars: 16, pillarR: 27 },
   // 2층 연못 석단: 반경 약 1.33배(18→24). 뱀이 몸을 펴고 돌아다닐 수 있는 넓이 (spawnZ = 플레이어 시작 z)
   pond: { radius: 24, spawnZ: 10.8 },
-  // 3층 용의 화산 제단: 용암 호수 위에 뜬 현무암 제단. 용(몸길이 ≈ 50, 날개폭 ≈ 45)은 하늘을 선회하므로 아레나는 반경만 넓다
+  // 3층 하늘 신전 제단: 구름 바다 위에 뜬 대리석 제단. 용(몸길이 ≈ 50, 날개폭 ≈ 45)은 하늘을 선회하므로 아레나는 반경만 넓다
   peak: { radius: 24, spawnZ: 11 },
 
   // 플레이어와 보스를 함께 화면에 담도록: 초점 = 플레이어×followRatio + 보스×bossRatio
@@ -209,8 +209,8 @@ export const CFG = {
    */
   dragon: {
     name: '겁화의 용',
-    floorLabel: '3층 · 용의 화산',
-    maxHp: 1500,
+    floorLabel: '3층 · 하늘 신전',
+    maxHp: 1300, // 이전 1500 → 약 절반을 원했지만 이무기(1200)보다는 높아야 해서 1300
     phaseAt: [0.67, 0.34],
     headMult: 1.5, // 머리 피해 배율
     bodyMult: 0.7, // 몸통

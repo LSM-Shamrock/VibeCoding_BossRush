@@ -404,7 +404,7 @@ export class Arena {
   private f1 = new THREE.Group();
   /** 2층(이무기의 못). 처음 들어갈 때 만든다 */
   private pond: Pond | null = null;
-  /** 3층(용의 화산 제단) */
+  /** 3층(하늘 신전 제단) */
   private volcano: Volcano | null = null;
   private theme = 1;
 
