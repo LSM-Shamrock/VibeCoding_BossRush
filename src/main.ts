@@ -18,6 +18,8 @@ import { KeyPanel } from './keypanel';
 import type { Boss, FloatKind, Host, Target } from './types';
 import { PAL } from './palette';
 import { WORLD } from './world';
+import { DIFF, DIFFS, setDifficulty, type DiffKey } from './difficulty';
+import { ExitDoor } from './exitdoor';
 
 /** 락온 중 시선이 몸통 방향보다 이만큼(rad) 더 아래를 보면 자유 조준으로 전환 */
 const LOCK_FREE_AIM = 0.17;
@@ -146,7 +148,7 @@ class Game implements Host {
       this.hadLock = locked;
     });
     canvas.addEventListener('pointerdown', () => {
-      if (!this.paused && (this.state === 'play' || this.state === 'intro') && !this.input.locked) this.lockPointer();
+      if (!this.paused && (this.state === 'play' || this.state === 'intro' || this.state === 'victory') && !this.input.locked) this.lockPointer();
     });
 
     this.player.onDeath = () => {
@@ -165,8 +167,10 @@ class Game implements Host {
        <span style="color:#a8957c">${this.binds.moveSummary()} 이동 · 마우스 시점 회전 · 왼쪽 버튼 길게 눌러 불꽃 모으기(떼면 발사) · ${this.binds.label('lockon')} 락온 · ${this.binds.label('dash')} 대시(무적) · ${this.binds.label('special')} 특수기</span><br>
        <span style="color:#a8957c">예고선과 바닥 마커가 보이면 피하고, 거미의 몸이 곧 신호다. 배(주황빛)가 약점.</span><br>
        <span style="color:#a8957c">Esc 로 일시정지 — 그 화면에서 키를 바꿀 수 있습니다.</span><br>
+       ${this.diffPicker()}
        <div class="go">클릭하여 시작</div>`,
     );
+    this.bindDiff();
     document.getElementById('overlay')!.addEventListener('click', () => this.onOverlayClick());
     window.addEventListener('blur', () => {
       if (!this.paused && (this.state === 'play' || this.state === 'intro')) this.setPaused(true);
@@ -226,8 +230,27 @@ class Game implements Host {
     }
   }
   private flameP = new THREE.Vector3();
+  private exitDoor: ExitDoor | null = null;
 
   /* ───────────── 흐름 ───────────── */
+  /** 보스 시작 전 난이도 선택 (노멀 5칸 / 하드 3칸 / 크레이지 1칸) */
+  private diffPicker() {
+    const btn = (k: DiffKey) =>
+      `<button type="button" class="diff${DIFF.key === k ? ' sel' : ''}" data-d="${k}"><b>${DIFFS[k].label}</b><small>${DIFFS[k].note}</small></button>`;
+    return `<div class="diffs">${btn('normal')}${btn('hard')}${btn('crazy')}</div>`;
+  }
+
+  private bindDiff() {
+    const btns = Array.from(document.querySelectorAll<HTMLButtonElement>('#ovbody .diff'));
+    for (const b of btns) {
+      b.addEventListener('click', (e) => {
+        e.stopPropagation(); // 오버레이 전체 클릭(= 시작)으로 번지지 않게
+        setDifficulty(b.dataset.d as DiffKey);
+        for (const o of btns) o.classList.toggle('sel', o === b);
+      });
+    }
+  }
+
   private onOverlayClick() {
     this.sfx.unlock();
     if (this.paused) {
@@ -284,6 +307,8 @@ class Game implements Host {
     if (floor !== this.floor || !this.boss) this.arena.setTheme(floor);
     this.floor = floor;
     this.fx.telegraphs.clear();
+    this.exitDoor?.dispose();
+    this.exitDoor = null;
     this.boss?.dispose();
     this.boss = null;
     this.targets = [];
@@ -309,10 +334,29 @@ class Game implements Host {
 
   private onBossDeath() {
     this.state = 'victory';
-    this.showCursor(true);
-    this.waitT = 3.4;
+    this.waitT = 3.0; // 이 뒤에 출구 문이 솟는다 (그동안 플레이어는 그대로 움직일 수 있다)
     this.hud.banner('격파', this.boss?.title ?? '', 3.0);
     window.setTimeout(() => this.sfx.victory(), 1400);
+  }
+
+  /** 보스를 잡은 뒤 맵 반대편에 문을 연다 */
+  private openExitDoor() {
+    const R = WORLD.radius;
+    const p = this.player.pos;
+    let dx = -p.x;
+    let dz = -p.z;
+    if (Math.hypot(dx, dz) < 4) {
+      dx = 0;
+      dz = -1;
+    }
+    const l = Math.hypot(dx, dz);
+    const x = (dx / l) * R * 0.55;
+    const z = (dz / l) * R * 0.55;
+    this.exitDoor?.dispose();
+    this.exitDoor = new ExitDoor(this, x, z, 0, 0);
+    this.sfx.victory();
+    this.hud.banner('문이 열렸다', '빛나는 문으로 들어가면 클리어', 3.0);
+    this.shake(0.6, 0.3);
   }
 
   private showOver() {
@@ -322,8 +366,10 @@ class Game implements Host {
       '등불이 꺼졌다',
       `${this.boss?.title ?? ''}의 남은 체력 <b>${left}%</b><br>
        <span style="color:#a8957c">같은 보스에게 처음부터 다시 도전합니다.</span><br>
+       ${this.diffPicker()}
        <div class="go">${this.binds.label('retry')} 키 또는 클릭으로 재도전</div>`,
     );
+    this.bindDiff();
   }
 
   private showClear() {
@@ -352,8 +398,10 @@ class Game implements Host {
        소요 시간 <b>${fmtTime(t)}</b>${isBest ? ' <span style="color:#ffd27a">· 최고 기록!</span>' : ` <span style="color:#a8957c">· 최고 ${fmtTime(best)}</span>`}<br>
        피격 <b>${this.player.hitsTaken}</b>회<br>
        <span style="color:#a8957c">${more ? `다음은 ${floor + 1}층 — 더 깊은 곳의 보스가 기다립니다. 체력은 가득 채워집니다.` : '다음 층의 보스(용)는 준비 중입니다.'}</span><br>
+       ${this.diffPicker()}
        <div class="go">${this.binds.label('retry')} 키 또는 클릭으로 ${more ? `${floor + 1}층으로` : '다시 도전'}</div>`,
     );
+    this.bindDiff();
   }
 
   private refreshKeyLabels() {
@@ -454,6 +502,7 @@ class Game implements Host {
     const reveal = this.state === 'intro' ? Math.min(1, Math.max(0, (this.introT - (this.dropIntro ? 1.0 : 0.1)) / 1.2)) : 1;
     this.hud.update({
       hp: this.player.hp,
+      maxHp: DIFF.hp,
       dashReady: 1 - this.player.dashCd / CFG.dash.cooldown,
       gauge: this.player.gauge / CFG.special.max,
       boss,
@@ -485,7 +534,14 @@ class Game implements Host {
         break;
       case 'victory':
         this.waitT -= raw;
-        if (this.waitT <= 0) this.showClear();
+        if (!this.exitDoor && this.waitT <= 0) this.openExitDoor();
+        if (this.exitDoor) {
+          this.exitDoor.update(raw);
+          if (this.exitDoor.entered(this.player.pos.x, this.player.pos.z)) {
+            this.showCursor(true);
+            this.showClear();
+          }
+        }
         break;
       case 'over':
         if (!this.overShown) {

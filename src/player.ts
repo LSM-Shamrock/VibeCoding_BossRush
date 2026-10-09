@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { DIFF } from './difficulty';
 import { CFG } from './config';
 import { Chain } from './procedural/chain';
 import { Arrows } from './arrows';
@@ -35,7 +36,7 @@ export class Player {
 
   yaw = Math.PI; // 앞 방향 = (sin yaw, cos yaw). π면 -Z(보스 쪽)
   private aimYaw = Math.PI;
-  hp: number = CFG.player.maxHp;
+  hp: number = DIFF.hp;
   invuln = 0;
   god = false;
   dead = false;
@@ -528,7 +529,7 @@ export class Player {
 
   respawn() {
     this.dead = false;
-    this.hp = CFG.player.maxHp;
+    this.hp = DIFF.hp;
     this.invuln = 1.5;
     this.gauge = 0;
     this.dashCd = 0;
@@ -553,7 +554,7 @@ export class Player {
 
   /* ───────────── 체력 디버그 ───────────── */
   setHp(v: number) {
-    this.hp = Math.max(1, Math.min(CFG.player.maxHp, v));
+    this.hp = Math.max(1, Math.min(DIFF.hp, v));
   }
 
   /* ───────────── 특수기 게이지 / 투척 ───────────── */

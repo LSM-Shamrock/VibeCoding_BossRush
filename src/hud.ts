@@ -6,6 +6,7 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 
 export interface HudState {
   hp: number;
+  maxHp: number;
   dashReady: number; // 0~1
   gauge: number; // 0~1
   boss: BossInfo | null;
@@ -83,6 +84,7 @@ export class Hud {
 
   update(s: HudState) {
     this.lamps.forEach((l, i) => {
+      l.style.display = i >= s.maxHp ? 'none' : ''; // 난이도에 따라 칸 수가 다르다
       const off = i >= s.hp;
       // 방금 꺼진 칸은 붉게 번쩍이며 줄어든다
       if (off && !l.classList.contains('off') && this.hpSeen) {
@@ -99,8 +101,10 @@ export class Hud {
       this.hurtEl.classList.add('on');
     }
     this.prevHp = s.hp;
-    this.lowEl.classList.toggle('on', s.hp > 0 && s.hp <= 2);
-    this.lowEl.classList.toggle('crit', s.hp === 1);
+    // 체력이 얼마 안 남았을 때의 붉은 맥동 (칸이 1개뿐인 난이도에서는 계속 켜져 있지 않게 한다)
+    const lowHp = s.maxHp > 1 && s.hp > 0 && s.hp <= Math.min(2, s.maxHp - 1);
+    this.lowEl.classList.toggle('on', lowHp);
+    this.lowEl.classList.toggle('crit', s.maxHp > 1 && s.hp === 1);
     this.hpSeen = true;
     this.dashFill.style.width = `${Math.round(s.dashReady * 100)}%`;
     this.dashFill.classList.toggle('ready', s.dashReady >= 1);
