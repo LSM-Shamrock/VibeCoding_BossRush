@@ -158,6 +158,8 @@ export class DragonLimb {
   private m4 = new THREE.Matrix4();
   private sc = new V3();
   private pos = new V3();
+  private mT = new V3();
+  private mC = new V3();
 
   constructor(private group: THREE.Group, private kit: LimbKit, readonly side: number, readonly fore: boolean) {
     const f = fore;
@@ -176,8 +178,8 @@ export class DragonLimb {
       this.meshes.push(me);
       return me;
     };
-    for (let i = 0; i < 3; i++) this.seg.push(add(kit.seg, kit.armor));
-    for (let i = 0; i < 6; i++) this.cuffs.push(add(kit.cuff, kit.armor));
+    for (let i = 0; i < (f ? 3 : 5); i++) this.seg.push(add(kit.seg, kit.armor));
+    for (let i = 0; i < (f ? 6 : 8); i++) this.cuffs.push(add(kit.cuff, kit.armor));
     for (let i = 0; i < 3; i++) this.jointMesh.push(add(kit.joint, kit.dark));
     this.pauldron = add(kit.joint, kit.armor);
     this.kneeSpike = add(kit.spike, kit.horn);
@@ -265,8 +267,19 @@ export class DragonLimb {
     j[3].copy(j[2]).addScaledVector(d3, this.L[2]);
     for (let i = 1; i < 4; i++) if (j[i].y < groundY) j[i].y = groundY;
 
-    this.setSeg(this.seg[0], j[0], j[1], this.R[0]);
-    this.setSeg(this.seg[1], j[1], j[2], this.R[1]);
+    if (this.fore) {
+      this.setSeg(this.seg[0], j[0], j[1], this.R[0]);
+      this.setSeg(this.seg[1], j[1], j[2], this.R[1]);
+    } else {
+      // 뒷다리: 허벅지 2파츠(굵은 윗부분 + 가는 아랫부분), 종아리 2파츠(불룩한 윗부분 + 가는 아랫부분).
+      // 각 파츠는 곧은 막대라 휘지 않고, 꺾이는 곳은 다리 전체(엉덩이) · 무릎 · 발목뿐이다.
+      this.mT.lerpVectors(j[0], j[1], 0.5);
+      this.mC.lerpVectors(j[1], j[2], 0.5);
+      this.setSeg(this.seg[0], j[0], this.mT, this.R[0]);
+      this.setSeg(this.seg[3], this.mT, j[1], this.R[0] * 0.69);
+      this.setSeg(this.seg[1], j[1], this.mC, this.R[1] * 1.25);
+      this.setSeg(this.seg[4], this.mC, j[2], this.R[1] * 0.7);
+    }
     this.setSeg(this.seg[2], j[2], j[3], this.R[2]);
     // 갑옷 띠
     const cuffAt = (idx: number, a: V3, b: V3, r: number, t0: number, len: number) => {
@@ -282,9 +295,24 @@ export class DragonLimb {
       m.scale.set(rr, L * len, rr);
     };
     cuffAt(0, j[0], j[1], this.R[0], 0.12, 0.3);
-    cuffAt(1, j[0], j[1], this.R[0], 0.55, 0.22);
     cuffAt(2, j[1], j[2], this.R[1], 0.1, 0.32);
-    cuffAt(3, j[1], j[2], this.R[1], 0.56, 0.24);
+    if (this.fore) {
+      cuffAt(1, j[0], j[1], this.R[0], 0.55, 0.22);
+      cuffAt(3, j[1], j[2], this.R[1], 0.56, 0.24);
+    } else {
+      this.cuffs[1].scale.set(0, 0, 0);
+      this.cuffs[3].scale.set(0, 0, 0);
+      // 파츠 이음매 띠 (허벅지 · 종아리)
+      const seam = (idx: number, a: V3, b: V3, at: V3, rr: number) => {
+        const m = this.cuffs[idx];
+        this.t1.subVectors(b, a).normalize();
+        m.position.copy(at).addScaledVector(this.t1, -0.5);
+        m.quaternion.setFromUnitVectors(UP, this.t1);
+        m.scale.set(rr, 1, rr);
+      };
+      seam(6, j[0], j[1], this.mT, this.R[0] * 0.56);
+      seam(7, j[1], j[2], this.mC, this.R[1] * 0.64);
+    }
     cuffAt(4, j[2], j[3], this.R[2], 0.1, 0.5);
     cuffAt(5, j[2], j[3], this.R[2], 0.7, 0.26);
 
