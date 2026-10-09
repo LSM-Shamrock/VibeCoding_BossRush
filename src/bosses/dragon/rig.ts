@@ -35,7 +35,7 @@ const at = (u: number) => Math.round(u * (NR - 1));
 const IW = at(0.18);
 const IH = at(0.434);
 const IFL = at(0.229);
-const IHL = at(0.458);
+const IHL = at(0.40); // 뒷다리를 더 앞쪽(머리 쪽)에 단다
 /** 날개 배율 (이전의 약 4배) */
 const WS = 3.8;
 const ARM = [4.8, 6.6];

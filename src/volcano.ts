@@ -14,7 +14,7 @@ const LAVA_Y = -3.2; // 구름 바다의 높이
 
 export const VOLC = {
   fog: 0xb4d4ee,
-  fogDensity: 0.002,
+  fogDensity: 0.0026,
   hemiSky: 0xcfe6ff,
   hemiGround: 0xb8c4d6,
   hemiIntensity: 0.95,
@@ -147,7 +147,7 @@ function makeLava(rand: () => number) {
 
 /** 제단 바닥: 흰 대리석 판석(방사형) + 금빛 상감선(발광 층) + 한가운데 태양 문양 */
 function makeAltar(rand: () => number) {
-  const S = 3072;
+  const S = 2048;
   const c = S / 2;
   const base = canvas(S);
   const glow = canvas(S);
@@ -158,7 +158,7 @@ function makeAltar(rand: () => number) {
   e.fillStyle = '#000';
   e.fillRect(0, 0, S, S);
   const px = S / (R * 2);
-  const bands = [0, 4.5, 9, 14, 19, 30, 44, 60, 78, R];
+  const bands = [0, 4.5, 9, 14, 19, 28, 38, R];
   for (let b = 0; b < bands.length - 1; b++) {
     const r0 = bands[b] * px;
     const r1 = bands[b + 1] * px;
@@ -333,7 +333,7 @@ export class Volcano {
     const colGeo = new THREE.CylinderGeometry(1, 1.12, 1, 14, 1).translate(0, 0.5, 0);
     const capGeo = new THREE.BoxGeometry(1, 1, 1);
     const NC = 14;
-    const RC = 215; // 넓어진 아레나(96)와 용이 선회하는 범위 밖 — 몸통이 기둥을 뚫지 않게 멀리
+    const RC = 150; // 아레나(48)와 용이 선회하는 범위 밖 — 몸통이 기둥을 뚫지 않게 멀리
     const cols = new THREE.InstancedMesh(colGeo, marble, NC * 3);
     const caps = new THREE.InstancedMesh(capGeo, marble, NC * 3);
     const o = new THREE.Object3D();
@@ -377,7 +377,7 @@ export class Volcano {
     const stumps = new THREE.InstancedMesh(colGeo, marble, 60);
     for (let i = 0; i < 60; i++) {
       const a = rand() * TAU;
-      const d = 250 + Math.pow(rand(), 0.8) * 280;
+      const d = 190 + Math.pow(rand(), 0.8) * 230;
       const h = 20 + rand() * 70;
       o.position.set(Math.cos(a) * d, LAVA_Y - 4, Math.sin(a) * d);
       o.scale.set(4 + rand() * 4, h, 4 + rand() * 4);
@@ -392,7 +392,7 @@ export class Volcano {
     for (let i = 0; i < 16; i++) {
       const m = new THREE.Mesh(rockGeo, marble);
       const a = rand() * TAU;
-      const d = 150 + rand() * 150;
+      const d = 110 + rand() * 130;
       const sc = 3 + rand() * 8;
       m.scale.set(sc, sc * (0.6 + rand() * 0.5), sc);
       m.position.set(Math.cos(a) * d, 4 + rand() * 40, Math.sin(a) * d);
@@ -422,8 +422,8 @@ export class Volcano {
     roof.position.y = 106;
     roof.scale.set(1, 0.5, 1);
     far.add(roof);
-    far.position.set(-420, -4, -600);
-    far.scale.setScalar(1.8);
+    far.position.set(-320, -4, -460);
+    far.scale.setScalar(1.4);
     far.rotation.y = 0.5;
     this.farTemple = far;
     root.add(far);

@@ -34,7 +34,8 @@ const SIDE = [1, -1, 1, -1];
 const FORE = [true, true, false, false];
 // 옆 방향 기준, 양수 = 앞쪽. 앞에서 볼 때만 ㄱ자가 되던 다리를 머리 쪽 안쪽으로 45° 돌려, 옆에서도 ㄱ자로 보이게 했다
 const TURN = Math.PI / 4;
-const HOME_ANGLE = [0.5 + TURN, 0.5 + TURN, -0.35 + TURN, -0.35 + TURN];
+const HIND_IN = (15 * Math.PI) / 180; // 뒷다리는 안쪽(머리 쪽)으로 15° 더
+const HOME_ANGLE = [0.5 + TURN, 0.5 + TURN, -0.35 + TURN + HIND_IN, -0.35 + TURN + HIND_IN];
 const HOME_R = 9 * 1.25;
 const HOME_DROP = 10.8 * 1.25;
 
