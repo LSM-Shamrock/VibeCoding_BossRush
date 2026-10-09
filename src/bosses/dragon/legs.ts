@@ -83,7 +83,7 @@ export class DragonLegs {
     this.clawMat = new THREE.MeshStandardMaterial({ color: 0xe6dcc2, emissive: 0x1a1608, roughness: 0.6, metalness: 0.1, flatShading: true });
     const toeGeo = new THREE.CylinderGeometry(0.5, 0.8, 1, 6).translate(0, 0.5, 0).rotateX(Math.PI / 2); // +Z 방향
     const clawGeo = new THREE.ConeGeometry(0.8, 1, 5).translate(0, 0.5, 0).rotateX(Math.PI / 2);
-    const palmGeo = new THREE.SphereGeometry(1, 9, 7);
+    const palmGeo = new THREE.CylinderGeometry(0.85, 1, 1, 8); // 위아래가 평평
     this.pawGeos.push(toeGeo, clawGeo, palmGeo);
     for (let i = 0; i < LEG_COUNT; i++) {
       this.paws.push(this.buildPaw(palmGeo, toeGeo, clawGeo));
@@ -116,25 +116,22 @@ export class DragonLegs {
     };
     const palm = mk(palmGeo, this.legMat, g);
     palm.scale.set(3.6, 1.7, 4.4);
-    for (let d = 0; d < 4; d++) {
-      const k = d - 1.5;
-      const len = d === 0 || d === 3 ? 0.85 : 1;
+    palm.position.y = 0.85; // 밑면이 평평하고 발끝 높이(y=0)에 닿는다
+    // 앞발톱 3개 + 뒷발톱 1개. 발가락은 그루터기만 남기고 발톱이 튀어나온다. 아래로 말리지 않고 수평으로 뻗는다.
+    const claw = (x: number, z: number, yaw: number, stub: number, clawLen: number) => {
       const dg = new THREE.Group();
-      dg.position.set(k * 2.1, -0.2, 3.4);
-      dg.rotation.set(0.28, k * 0.13, 0);
+      dg.position.set(x, 1.2, z);
+      dg.rotation.y = yaw;
       g.add(dg);
-      mk(toeGeo, this.legMat, dg).scale.set(1.5, 1.5, 4.6 * len);
-      const d2 = new THREE.Group();
-      d2.position.z = 4.6 * len;
-      d2.rotation.x = 0.5;
-      dg.add(d2);
-      mk(toeGeo, this.legMat, d2).scale.set(1.15, 1.15, 3.6 * len);
+      mk(toeGeo, this.legMat, dg).scale.set(1.5, 1.5, stub);
       const cl = new THREE.Group();
-      cl.position.z = 3.6 * len;
-      cl.rotation.x = 0.4;
-      d2.add(cl);
-      mk(clawGeo, this.clawMat, cl).scale.set(1.15, 1.15, 3.4);
-    }
+      cl.position.z = stub;
+      dg.add(cl);
+      mk(clawGeo, this.clawMat, cl).scale.set(1.3, 1.3, clawLen);
+    };
+    for (let k = -1; k <= 1; k++) claw(k * 2.5, 3.5, k * 0.12, 1.6, 3.6);
+    claw(0, -3.4, Math.PI, 1.2, 3.2);
+    g.scale.setScalar(0.75);
     this.group.add(g);
     return g;
   }
