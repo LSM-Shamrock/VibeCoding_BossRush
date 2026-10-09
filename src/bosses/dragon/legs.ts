@@ -36,6 +36,31 @@ const HOME_ANGLE = [0.5 + TURN, 0.5 + TURN, -0.35 + TURN, -0.35 + TURN];
 const HOME_R = 15;
 const HOME_DROP = 18;
 
+/**
+ * 가로(축을 지나는 수평면)로 반을 자른 원뿔대. +Z 방향으로 뻗고, 아랫면(y=0)이 평평하며 위쪽 반만 남는다.
+ * r0 = 뿌리 반지름, r1 = 끝 반지름 (0 이면 뾰족한 반 원뿔)
+ */
+function halfCone(r0: number, r1: number, n = 6): THREE.BufferGeometry {
+  const pos: number[] = [];
+  const tri = (a: number[], b: number[], c: number[]) => pos.push(...a, ...b, ...c);
+  const ring = (r: number, z: number, i: number) => [r * Math.cos((Math.PI * i) / n), r * Math.sin((Math.PI * i) / n), z];
+  for (let i = 0; i < n; i++) {
+    const a0 = ring(r0, 0, i), a1 = ring(r0, 0, i + 1), b0 = ring(r1, 1, i), b1 = ring(r1, 1, i + 1);
+    tri(a0, a1, b1); // 옆면
+    if (r1 > 1e-6) tri(a0, b1, b0);
+    tri([0, 0, 0], a1, a0); // 뿌리 쪽 뚜껑
+    if (r1 > 1e-6) tri([0, 0, 1], b0, b1); // 끝 뚜껑
+  }
+  // 평평한 아랫면
+  const L0 = [-r0, 0, 0], R0 = [r0, 0, 0], L1 = [-r1, 0, 1], R1 = [r1, 0, 1];
+  tri(L0, R0, R1);
+  if (r1 > 1e-6) tri(L0, R1, L1);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
 export interface LegFrame {
   c: V3;
   R: V3;
@@ -78,12 +103,12 @@ export class DragonLegs {
     const kneeGeo = new THREE.SphereGeometry(0.4, 9, 7);
     this.geos = [upperGeo, lowerGeo, kneeGeo];
     // 색만 용에 맞춰 바꿨다 (거미: 0x35160e / 무릎 0xc08a34)
-    this.legMat = new THREE.MeshStandardMaterial({ color: 0x6a1a12, emissive: 0x3a0c06, roughness: 0.74, metalness: 0.08, flatShading: true });
-    this.kneeMat = new THREE.MeshStandardMaterial({ color: 0xd9a441, emissive: 0x4a2806, roughness: 0.74, metalness: 0.08, flatShading: true });
-    this.clawMat = new THREE.MeshStandardMaterial({ color: 0xe6dcc2, emissive: 0x1a1608, roughness: 0.6, metalness: 0.1, flatShading: true });
-    const toeGeo = new THREE.CylinderGeometry(0.5, 0.8, 1, 6).translate(0, 0.5, 0).rotateX(Math.PI / 2); // +Z 방향
-    const clawGeo = new THREE.ConeGeometry(0.8, 1, 5).translate(0, 0.5, 0).rotateX(Math.PI / 2);
-    const palmGeo = new THREE.CylinderGeometry(0.85, 1, 1, 8); // 위아래가 평평
+    this.legMat = new THREE.MeshStandardMaterial({ color: 0x6a1a12, emissive: 0x3a0c06, roughness: 0.74, metalness: 0.08, flatShading: true, side: THREE.DoubleSide });
+    this.kneeMat = new THREE.MeshStandardMaterial({ color: 0xd9a441, emissive: 0x4a2806, roughness: 0.74, metalness: 0.08, flatShading: true, side: THREE.DoubleSide });
+    this.clawMat = new THREE.MeshStandardMaterial({ color: 0xe6dcc2, emissive: 0x1a1608, roughness: 0.6, metalness: 0.1, flatShading: true, side: THREE.DoubleSide });
+    const toeGeo = halfCone(0.8, 0.55);
+    const clawGeo = halfCone(0.8, 0);
+    const palmGeo = new THREE.CylinderGeometry(0.9, 1, 1, 8);
     this.pawGeos.push(toeGeo, clawGeo, palmGeo);
     for (let i = 0; i < LEG_COUNT; i++) {
       this.paws.push(this.buildPaw(palmGeo, toeGeo, clawGeo));
@@ -114,23 +139,25 @@ export class DragonLegs {
       parent.add(m);
       return m;
     };
+    // 발바닥 원은 눈에 띄지 않게 작게. 발가락 3개는 앞쪽 작은 한 점에서 뭉쳐 나와 옆으로 갈라진다 (▽ 꼴)
     const palm = mk(palmGeo, this.legMat, g);
-    palm.scale.set(3.6, 1.7, 4.4);
-    palm.position.y = 0.85; // 밑면이 평평하고 발끝 높이(y=0)에 닿는다
-    // 앞발톱 3개 + 뒷발톱 1개. 발가락은 그루터기만 남기고 발톱이 튀어나온다. 아래로 말리지 않고 수평으로 뻗는다.
+    palm.scale.set(2.5, 1.2, 2.4);
+    palm.position.y = 0.6; // 밑면이 평평하고 y=0 에 닿는다
+    // 발가락은 그루터기만 남기고 발톱이 튀어나온다. 모두 아랫면이 y=0 인 반쪽 원뿔이라 발바닥이 평평하다.
     const claw = (x: number, z: number, yaw: number, stub: number, clawLen: number) => {
       const dg = new THREE.Group();
-      dg.position.set(x, 1.2, z);
+      dg.position.set(x, 0, z);
       dg.rotation.y = yaw;
       g.add(dg);
-      mk(toeGeo, this.legMat, dg).scale.set(1.5, 1.5, stub);
+      mk(toeGeo, this.legMat, dg).scale.set(1.5, 1.2, stub);
       const cl = new THREE.Group();
       cl.position.z = stub;
       dg.add(cl);
-      mk(clawGeo, this.clawMat, cl).scale.set(1.3, 1.3, clawLen);
+      mk(clawGeo, this.clawMat, cl).scale.set(1.3, 1.1, clawLen);
     };
-    for (let k = -1; k <= 1; k++) claw(k * 2.5, 3.5, -k * (5 * Math.PI / 180), 1.6, 3.6); // 바깥 발가락을 안쪽으로 5° 모은다
-    claw(0, -3.4, Math.PI, 1.2, 3.2);
+    const FAN = (22 * Math.PI) / 180;
+    for (let k = -1; k <= 1; k++) claw(k * 0.45, 1.5, k * FAN, 1.6, 3.6);
+    claw(0, -1.5, Math.PI, 1.0, 3.0); // 뒷발톱
     g.scale.setScalar(0.75);
     this.group.add(g);
     return g;
@@ -161,7 +188,7 @@ export class DragonLegs {
         .copy(hip)
         .addScaledVector(f.R, s * r * Math.cos(a))
         .addScaledVector(f.T, r * Math.sin(a));
-      this.homes[i].y = Math.max(0.3, hip.y - HOME_DROP);
+      this.homes[i].y = Math.max(0.9, hip.y - HOME_DROP);
     }
 
     if (!this.inited) {
@@ -191,7 +218,7 @@ export class DragonLegs {
       const s = SIDE[i];
       const hip = hips[i];
       // 하늘에는 땅이 없으니, 박힌 발도 몸이 오르내린 만큼 같이 오르내린다
-      if (!this.gait.isStepping(i)) this.gait.feet[i].y = Math.max(0.3, this.gait.feet[i].y + (hip.y - this.hipPrev[i].y));
+      if (!this.gait.isStepping(i)) this.gait.feet[i].y = Math.max(0.9, this.gait.feet[i].y + (hip.y - this.hipPrev[i].y));
       this.hipPrev[i].copy(hip);
 
       this.gait.get(i, this.foot);
@@ -216,6 +243,7 @@ export class DragonLegs {
       // 손발: 발끝에 놓고, 몸 앞쪽을 향해 바닥과 나란히 편다
       const paw = this.paws[i];
       paw.position.copy(this.end);
+      paw.position.y -= 0.6; // 다리 끝이 발 안쪽에 들어가도록 발을 내린다
       this.bz.copy(f.T);
       this.bz.y = 0;
       if (this.bz.lengthSq() < 1e-6) this.bz.set(0, 0, 1);
