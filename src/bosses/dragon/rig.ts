@@ -7,12 +7,13 @@ const V3 = THREE.Vector3;
 type V3 = THREE.Vector3;
 const TAU = Math.PI * 2;
 const UP = new V3(0, 1, 0);
+const Z_AXIS = new V3(0, 0, 1);
 
 /* ───────────────────────── 치수 ───────────────────────── */
 /** 머리 뒤로 이어지는 몸통(목 · 가슴 · 허리 · 꼬리) 길이 */
-export const BODY_LEN = 50;
+export const BODY_LEN = 200;
 /** 마디 간격 */
-const DS = 0.6;
+const DS = 0.8;
 export const NR = Math.floor(BODY_LEN / DS) + 1;
 /** 몸통 단면 분할 수 */
 const M = 14;
@@ -20,15 +21,19 @@ const VW = M + 1;
 /** 머리가 지나간 길(궤적)을 남기는 간격 */
 const TS = 0.4;
 const CAP = Math.ceil((BODY_LEN + 30) / TS);
+/** 몸통 굵기 배율 (몸이 4배로 길어진 만큼 굵기도 함께 키운다) */
+const RS = 1.5;
 /** 머리 배율 */
-const HS = 1.55;
+const HS = 2.3;
+/** 몸통 길이 비율(0~1) → 마디 번호 */
+const at = (u: number) => Math.round(u * (NR - 1));
 /** 날개가 붙는 마디 / 날개막 뒤쪽이 붙는 마디 / 앞다리 · 뒷다리 마디 */
-const IW = 15;
-const IH = 36;
-const IFL = 19;
-const IHL = 38;
-/** 날개 배율 */
-const WS = 0.95;
+const IW = at(0.18);
+const IH = at(0.434);
+const IFL = at(0.229);
+const IHL = at(0.458);
+/** 날개 배율 (이전의 약 4배) */
+const WS = 3.8;
 const ARM = [4.8, 6.6];
 const FING = [13, 11.8, 9.6, 7.4];
 
@@ -42,10 +47,15 @@ const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
 
 /** 마디 반지름: 가는 목 → 두툼한 가슴 → 허리 → 길게 가늘어지는 꼬리 */
 function radiusAt(s: number) {
-  if (s < 11) return 1.15 + 1.0 * smooth(s / 11);
-  if (s < 28) return 2.15 - 0.55 * smooth((s - 11) / 17);
-  const k = (s - 28) / (BODY_LEN - 28);
-  return 1.6 * Math.pow(Math.max(0, 1 - k), 1.15) + 0.08;
+  const u = s / BODY_LEN;
+  let r: number;
+  if (u < 0.22) r = 1.15 + 1.0 * smooth(u / 0.22);
+  else if (u < 0.56) r = 2.15 - 0.55 * smooth((u - 0.22) / 0.34);
+  else {
+    const k = (u - 0.56) / 0.44;
+    r = 1.6 * Math.pow(Math.max(0, 1 - k), 1.15) + 0.08;
+  }
+  return r * RS;
 }
 const RAD = new Float32Array(NR);
 for (let i = 0; i < NR; i++) RAD[i] = radiusAt(i * DS);
@@ -227,7 +237,10 @@ export class DragonRig {
   private mouthLight: THREE.PointLight;
   private whiskers: THREE.Group[] = [];
   private wings: { side: number; bones: THREE.Mesh[]; mem: THREE.Mesh; memGeo: THREE.BufferGeometry; memPos: Float32Array; pts: V3[] }[] = [];
-  private limbs: { ring: number; side: number; bones: Bone[]; claws: THREE.Mesh; fore: boolean }[] = [];
+  private limbs: { ring: number; side: number; bones: Bone[]; claws: THREE.Mesh; fore: boolean; haunch: THREE.Mesh; knee: THREE.Mesh }[] = [];
+  private limbMat: THREE.MeshStandardMaterial | null = null;
+  private haunchGeo: THREE.BufferGeometry | null = null;
+  private kneeGeo: THREE.BufferGeometry | null = null;
   private tailBlade: THREE.Mesh;
   private boneGeo = new THREE.CylinderGeometry(0.62, 1, 1, 7, 1).translate(0, 0.5, 0);
   private disposables: Array<{ dispose(): void }> = [];
@@ -276,12 +289,12 @@ export class DragonRig {
     const uv = new Float32Array(nv * 2);
     const col = new Float32Array(nv * 3);
     for (let i = 0; i < NR; i++) {
-      const tailK = smooth((i * DS - 20) / 30);
+      const tailK = smooth((i * DS - 80) / 120);
       for (let j = 0; j < VW; j++) {
         const a = (j / M) * TAU;
         const v = i * VW + j;
         uv[v * 2] = (j / M) * 4;
-        uv[v * 2 + 1] = (i * DS) / 2.4;
+        uv[v * 2 + 1] = (i * DS) / 3.6;
         const belly = smooth(-Math.sin(a) * 1.7 - 0.12);
         const back = [0.42 - 0.12 * tailK, 0.07, 0.055];
         const bel = [0.92, 0.62, 0.3];
@@ -322,7 +335,7 @@ export class DragonRig {
 
     /* ── 머리 ── */
     this.buildHead(horn, dark);
-    this.headSphere = { x: 0, y: 0, z: 0, r: 2.7, kind: 'head' };
+    this.headSphere = { x: 0, y: 0, z: 0, r: 4.0, kind: 'head' };
     this.mouthLight = new THREE.PointLight(0xff7a28, 0, 46, 1.4);
     this.headRoot.add(this.mouthLight);
     this.mouthLight.position.set(0, -0.3, 3.2);
@@ -346,7 +359,7 @@ export class DragonRig {
 
     /* 판정 구 */
     this.parts.push(this.headSphere);
-    for (let i = 2; i < NR; i += 2) this.parts.push({ x: 0, y: 0, z: 0, r: RAD[i] + 0.3, kind: 'body' });
+    for (let i = 2; i < NR; i += 2) this.parts.push({ x: 0, y: 0, z: 0, r: RAD[i] + 0.4, kind: 'body' });
     for (let k = 0; k < 8; k++) this.parts.push({ x: 0, y: 0, z: 0, r: 2, kind: 'wing' });
     this.layoutLine(0, 20, 0, 0, 1);
   }
@@ -540,19 +553,34 @@ export class DragonRig {
 
   private buildLimb(ring: number, side: number, fore: boolean, dark: THREE.Material, horn: THREE.Material) {
     const bones: Bone[] = [];
+    // 다리 재질: 몸통과 같은 붉은 비늘빛 (뒷다리는 근육이 불룩하게)
+    if (!this.limbMat) {
+      this.limbMat = stdMat(0x8a2418, 0x6a1606, 0.55, 0.25, true);
+      this.limbMat.emissiveIntensity = 0.85;
+      this.disposables.push(this.limbMat);
+      this.haunchGeo = new THREE.SphereGeometry(1, 14, 10);
+      this.disposables.push(this.haunchGeo);
+    }
     for (let i = 0; i < 3; i++) {
-      const m = new THREE.Mesh(this.boneGeo, i === 2 ? dark : this.boneMat);
+      const m = new THREE.Mesh(this.boneGeo, i === 2 ? dark : this.limbMat);
       m.castShadow = true;
       m.frustumCulled = false;
       this.group.add(m);
       bones.push({ mesh: m });
     }
-    const claws = merge([0, 1, 2].map((k) => aimed(spike(0.9, 0.12, 4), [(k - 1) * 0.28, 0, 0.1], [(k - 1) * 0.3, -0.55, 0.9])));
+    const haunch = new THREE.Mesh(this.haunchGeo!, this.limbMat);
+    haunch.castShadow = true;
+    haunch.frustumCulled = false;
+    this.group.add(haunch);
+    const knee = new THREE.Mesh(this.kneeGeo ?? (this.kneeGeo = spike(1.6, 0.5, 4)), dark);
+    knee.frustumCulled = false;
+    this.group.add(knee);
+    const claws = merge([0, 1, 2, 3].map((k) => aimed(spike(1.0, 0.14, 4), [(k - 1.5) * 0.3, 0, 0.1], [(k - 1.5) * 0.28, -0.7, 0.8])));
     const cm = new THREE.Mesh(claws, horn);
     cm.frustumCulled = false;
     this.group.add(cm);
-    this.disposables.push(claws);
-    this.limbs.push({ ring, side, bones, claws: cm, fore });
+    this.disposables.push(claws, this.kneeGeo);
+    this.limbs.push({ ring, side, bones, claws: cm, fore, haunch, knee });
   }
 
   /* ───────────────────────── 배치 · 제어 ───────────────────────── */
@@ -809,16 +837,16 @@ export class DragonRig {
     const flapBob = Math.sin(this.flapPh);
     for (let i = 0; i < NR; i++) {
       const s = i * DS;
-      const ramp = smooth(s / 40);
-      const amp = und * (0.12 + 1.9 * ramp);
-      const lat = amp * Math.sin(t * 2.6 - s * 0.24);
-      const ver = amp * 0.5 * Math.sin(t * 2.1 - s * 0.2 + 1.3);
+      const ramp = smooth(s / 160);
+      const amp = und * (0.3 + 4.6 * ramp);
+      const lat = amp * Math.sin(t * 2.5 - s * 0.1);
+      const ver = amp * 0.45 * Math.sin(t * 2.0 - s * 0.085 + 1.3);
       const pi = this.P[i];
       const po = this.Pout[i];
       po.copy(pi).addScaledVector(this.Rv[i], lat).addScaledVector(this.U[i], ver);
       // 날갯짓에 어깨가 출렁인다
-      const sh = Math.exp(-Math.pow((i - IW) / 7, 2));
-      po.y += -flapBob * 0.55 * this.cur.amp * sh * (1 - this.lyingK);
+      const sh = Math.exp(-Math.pow((i - IW) / 14, 2));
+      po.y += -flapBob * 2.2 * this.cur.amp * sh * (1 - this.lyingK);
       // 숨쉬기(가슴)
       const br = 1 + 0.025 * Math.sin(t * 2.4 - s * 0.15);
       void br;
@@ -882,7 +910,7 @@ export class DragonRig {
       this.tv.copy(U).addScaledVector(T, -0.5).normalize();
       this.tv2.crossVectors(R, this.tv).normalize();
       this.m4.makeBasis(R, this.tv, this.tv2);
-      const sz = i < 9 ? 0.55 + i * 0.05 : clamp(RAD[i] * 0.62 + 0.25, 0.3, 1.5);
+      const sz = i < 14 ? 0.8 + i * 0.05 : clamp(RAD[i] * 0.62 + 0.4, 0.5, 2.4);
       this.m4.scale(this.sv.set(sz, sz * (1 + 0.12 * Math.sin(this.t * 3 + i)), sz));
       this.m4.setPosition(c.x + U.x * RAD[i] * 0.86, c.y + U.y * RAD[i] * 0.86, c.z + U.z * RAD[i] * 0.86);
       this.spines.setMatrixAt(k, this.m4);
@@ -892,6 +920,7 @@ export class DragonRig {
     // 꼬리 칼날
     const e = NR - 1;
     this.m4.makeBasis(this.Rv[e], this.U[e], this.T[e]);
+    this.m4.scale(this.sv.set(2.4, 2.4, 2.4));
     this.m4.setPosition(this.Pout[e]);
     this.tailBlade.matrixAutoUpdate = false;
     this.tailBlade.matrix.copy(this.m4);
@@ -990,9 +1019,9 @@ export class DragonRig {
       w.memGeo.computeVertexNormals();
       w.memGeo.computeBoundingSphere();
       // 뼈대
-      this.setBone(w.bones[0], p[0], p[1], 0.42);
-      this.setBone(w.bones[1], p[1], p[2], 0.36);
-      for (let k = 0; k < 4; k++) this.setBone(w.bones[2 + k], p[2], p[3 + k], 0.2 - k * 0.012);
+      this.setBone(w.bones[0], p[0], p[1], 1.3);
+      this.setBone(w.bones[1], p[1], p[2], 1.1);
+      for (let k = 0; k < 4; k++) this.setBone(w.bones[2 + k], p[2], p[3 + k], 0.62 - k * 0.04);
       tips[wi].copy(p[3]);
     }
   }
@@ -1010,9 +1039,14 @@ export class DragonRig {
     m.scale.set(r, L, r);
   }
 
+  /**
+   * 다리: 날아다니는 자세 — 허벅지는 굵게 아래뒤로, 정강이와 발은 몸 뒤쪽으로 쭉 젖혀 늘어뜨린다 (매가 발을 접어 넣은 모양).
+   * tuck(0~1)이 클수록 더 뒤로 젖혀진다. 평소에도 항상 0.75 이상 젖혀 둔다.
+   */
   private updateLimbs() {
-    const tuck = this.curTuck;
+    const pose = clamp(0.78 + 0.22 * this.curTuck, 0, 1);
     const t = this.t;
+    const A = this.tv;
     for (const l of this.limbs) {
       const c = this.Pout[l.ring];
       const R = this.Rv[l.ring];
@@ -1020,31 +1054,54 @@ export class DragonRig {
       const T = this.T[l.ring];
       const rad = RAD[l.ring];
       const s = l.side;
-      const sw = Math.sin(t * 1.7 + l.ring + s) * 0.35 * (1 - tuck);
-      const hip = this.pv.set(c.x + R.x * s * rad * 0.7 - U.x * rad * 0.45, c.y + R.y * s * rad * 0.7 - U.y * rad * 0.45, c.z + R.z * s * rad * 0.7 - U.z * rad * 0.45).clone();
-      const k = l.fore ? 0.85 : 1.1;
-      // 무릎: 옆 · 아래 · (접으면 몸 뒤쪽으로)
-      const knee = hip
-        .clone()
-        .addScaledVector(R, s * 1.0 * k)
-        .addScaledVector(U, -(1.3 - tuck * 0.7) * k)
-        .addScaledVector(T, (0.5 - tuck * 1.9 + sw) * k);
-      const foot = knee
-        .clone()
-        .addScaledVector(R, s * 0.35 * k)
-        .addScaledVector(U, -(1.9 - tuck * 1.5) * k)
-        .addScaledVector(T, (0.8 - tuck * 2.4 + sw) * k);
-      const toe = foot.clone().addScaledVector(T, 0.9 * k).addScaledVector(U, -0.25 * k);
+      const fore = l.fore;
+      const sway = Math.sin(t * 1.7 + l.ring + s) * 0.06;
+      // 길이 (뒷다리가 훨씬 길고 굵다)
+      const L1 = fore ? 3.4 : 6.2;
+      const L2 = fore ? 3.6 : 6.4;
+      const L3 = fore ? 2.4 : 4.4;
+      const r1 = fore ? 1.0 : 2.0;
+      const r2 = fore ? 0.7 : 1.3;
+      const r3 = fore ? 0.55 : 0.95;
+      // 방향 (x = 바깥쪽, y = 위, z = 앞)
+      const d1 = this.dirLocal(s, lerp(0.25, 0.42, pose), lerp(-0.92, -0.5, pose) + sway, lerp(0.1, fore ? -0.55 : -0.78, pose), R, U, T, this.d1);
+      const d2 = this.dirLocal(s, lerp(0.1, 0.14, pose), lerp(-0.96, fore ? -0.28 : -0.1, pose) - sway, lerp(0.2, -0.95, pose), R, U, T, this.d2);
+      const d3 = this.dirLocal(s, 0.04, lerp(-0.7, -0.42, pose) + sway, lerp(0.7, -0.88, pose), R, U, T, this.d3);
+      const hip = this.pv.set(c.x + R.x * s * rad * 0.72 - U.x * rad * 0.5, c.y + R.y * s * rad * 0.72 - U.y * rad * 0.5, c.z + R.z * s * rad * 0.72 - U.z * rad * 0.5).clone();
+      const knee = hip.clone().addScaledVector(d1, L1);
+      const foot = knee.clone().addScaledVector(d2, L2);
+      const toe = foot.clone().addScaledVector(d3, L3);
       if (foot.y < 0.3) foot.y = 0.3;
       if (toe.y < 0.2) toe.y = 0.2;
-      this.setBone(l.bones[0].mesh, hip, knee, 0.62 * k);
-      this.setBone(l.bones[1].mesh, knee, foot, 0.46 * k);
-      this.setBone(l.bones[2].mesh, foot, toe, 0.34 * k);
+      this.setBone(l.bones[0].mesh, hip, knee, r1);
+      this.setBone(l.bones[1].mesh, knee, foot, r2);
+      this.setBone(l.bones[2].mesh, foot, toe, r3);
+      // 허벅지 근육(불룩한 덩어리) · 무릎 가시
+      A.copy(d1);
+      l.haunch.position.copy(hip).addScaledVector(d1, L1 * 0.42);
+      l.haunch.quaternion.setFromUnitVectors(Z_AXIS, A);
+      l.haunch.scale.set(r1 * 1.25, r1 * 1.15, L1 * 0.62);
+      l.knee.position.copy(knee);
+      this.tv2.copy(d1).sub(d2).normalize();
+      l.knee.quaternion.setFromUnitVectors(UP, this.tv2.lengthSq() > 0.01 ? this.tv2 : UP);
+      l.knee.scale.setScalar(fore ? 0.7 : 1.1);
+      // 발톱: 발끝에서 아래쪽으로 갈고리처럼 굽는다
       l.claws.position.copy(toe);
-      this.tv.subVectors(toe, foot).normalize();
-      l.claws.quaternion.setFromUnitVectors(new V3(0, 0, 1), this.tv);
-      l.claws.scale.setScalar(k * 1.1);
+      this.tv2.copy(d3);
+      A.crossVectors(U, this.tv2).normalize();
+      this.sv.crossVectors(this.tv2, A).normalize();
+      this.m4.makeBasis(A, this.sv, this.tv2);
+      l.claws.quaternion.setFromRotationMatrix(this.m4);
+      l.claws.scale.setScalar(fore ? 1.6 : 2.6);
     }
+  }
+
+  private d1 = new V3();
+  private d2 = new V3();
+  private d3 = new V3();
+  private dirLocal(side: number, x: number, y: number, z: number, R: V3, U: V3, T: V3, out: V3) {
+    out.set(R.x * side * x + U.x * y + T.x * z, R.y * side * x + U.y * y + T.y * z, R.z * side * x + U.z * y + T.z * z);
+    return out.normalize();
   }
 
   private updateParts() {
@@ -1072,12 +1129,12 @@ export class DragonRig {
         p.z = a.z;
         p.r = r;
       };
-      mk(pts[1], 2.0);
-      mk(pts[2], 2.2);
+      mk(pts[1], 5.5);
+      mk(pts[2], 6.0);
       this.tv.lerpVectors(pts[2], pts[3], 0.5);
-      mk(this.tv, 2.1);
+      mk(this.tv, 6.0);
       this.tv.lerpVectors(pts[2], pts[3], 0.88);
-      mk(this.tv, 1.7);
+      mk(this.tv, 4.8);
     }
   }
 

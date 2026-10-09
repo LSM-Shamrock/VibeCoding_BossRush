@@ -2,26 +2,26 @@ import * as THREE from 'three';
 import { CFG } from './config';
 
 /**
- * 3층 · 용의 화산 — 용암 호수 한가운데 떠 있는 현무암 제단.
+ * 3층 · 용의 화산 — 용암 호수 한가운데 떠 있는 현무암 제단. 머리 위는 구름 몇 점 뜬 맑은 낮 하늘.
  *
- *   · 색: 검붉은 재구름 하늘, 시커먼 현무암 바닥, 갈라진 틈마다 새어 나오는 주황 용암빛.
- *         (1층 모래빛 유적 / 2층 푸른 못과 확실히 구분된다. 위험 표시의 붉은색이 읽히도록 바닥은 어둡게 둔다)
+ *   · 색: 맑게 갠 파란 하늘과 환한 햇빛, 시커먼 현무암 바닥, 갈라진 틈마다 새어 나오는 주황 용암빛.
+ *         (위험 표시의 붉은색이 읽히도록 바닥은 어둡게 둔다)
  *   · 지형: 둥근 제단 → 가장자리에서 용암이 비친다 → 바깥은 끝없는 용암 호수, 솟은 흑요석 첨탑, 둥둥 뜬 바윗덩이, 멀리 불을 뿜는 화산.
- *   · 용이 하늘을 날아다니므로 하늘(돔)에 공을 들였다: 불타는 구름, 화산이 뿜을 때 번쩍이는 하늘.
+ *   · 용이 하늘을 날아다니므로 하늘(돔)에 공을 들였다: 맑은 하늘과 뭉게구름, 해. 용이 포효하면 하늘이 번쩍 밝아진다.
  */
 const TAU = Math.PI * 2;
 const R = CFG.peak.radius;
 const LAVA_Y = -3.2;
 
 export const VOLC = {
-  fog: 0x2a0d08,
-  fogDensity: 0.0072,
-  hemiSky: 0xc87a50,
-  hemiGround: 0x2a0d06,
-  hemiIntensity: 1.0,
-  sun: 0xff9a60,
-  sunIntensity: 1.3,
-  sunPos: [-14, 26, 10] as [number, number, number],
+  fog: 0xb4d4ee,
+  fogDensity: 0.0034,
+  hemiSky: 0xcfe6ff,
+  hemiGround: 0x8a5238,
+  hemiIntensity: 1.25,
+  sun: 0xfff0d2,
+  sunIntensity: 2.3,
+  sunPos: [-26, 48, 18] as [number, number, number],
 };
 
 function mulberry32(seed: number) {
@@ -48,60 +48,77 @@ function tex(cv: HTMLCanvasElement, srgb = true) {
   return t;
 }
 
-/** 하늘 돔 텍스처 (등장방형): 위는 검붉은 어둠, 지평선은 이글거리는 주황, 구름 덩어리가 붉게 타오른다 */
+/** 하늘 돔 텍스처 (등장방형): 맑게 갠 낮 하늘 — 위는 짙은 파랑, 지평선은 하얗게 흐려지고, 뭉게구름이 떠 있다 */
 function makeSky(rand: () => number) {
   const W = 1024;
   const H = 512;
   const { cv, g } = canvas(W, H);
   const gr = g.createLinearGradient(0, 0, 0, H);
-  gr.addColorStop(0, '#07020a');
-  gr.addColorStop(0.28, '#26070c');
-  gr.addColorStop(0.46, '#6a1a0c');
-  gr.addColorStop(0.5, '#e0661c');
-  gr.addColorStop(0.53, '#7a2008');
-  gr.addColorStop(0.6, '#1a0805');
-  gr.addColorStop(1, '#0c0403');
+  gr.addColorStop(0, '#1d5fc4');
+  gr.addColorStop(0.2, '#2f7fd8');
+  gr.addColorStop(0.38, '#6fb0ea');
+  gr.addColorStop(0.49, '#aed3f0');
+  gr.addColorStop(0.53, '#bcdaf1');
+  gr.addColorStop(1, '#bcdaf1');
   g.fillStyle = gr;
   g.fillRect(0, 0, W, H);
-  // 구름: 어두운 덩어리 + 아래쪽이 불빛에 물든 가장자리
-  for (let i = 0; i < 170; i++) {
-    const x = rand() * W;
-    const y = H * (0.12 + rand() * 0.38);
-    const w = 60 + rand() * 190;
-    const h = 14 + rand() * 40;
-    const near = 1 - Math.abs(y / H - 0.46) * 2.4;
-    const gg = g.createRadialGradient(x, y, 0, x, y, w);
-    gg.addColorStop(0, `rgba(14,5,6,${0.45 + rand() * 0.3})`);
-    gg.addColorStop(1, 'rgba(14,5,6,0)');
+  const puff = (x: number, y: number, r: number, squash: number, rgb: string, a: number) => {
+    const gg = g.createRadialGradient(x, y, 0, x, y, r);
+    gg.addColorStop(0, `rgba(${rgb},${a})`);
+    gg.addColorStop(0.6, `rgba(${rgb},${a * 0.55})`);
+    gg.addColorStop(1, `rgba(${rgb},0)`);
     for (const ox of [-W, 0, W]) {
       g.save();
       g.translate(x + ox, y);
-      g.scale(1, h / w);
+      g.scale(1, squash);
       g.translate(-x, -y);
       g.fillStyle = gg;
-      g.fillRect(x - w, y - w, w * 2, w * 2);
+      g.fillRect(x - r, y - r, r * 2, r * 2);
       g.restore();
     }
-    if (near > 0) {
-      const lit = g.createRadialGradient(x, y + h * 0.5, 0, x, y + h * 0.5, w * 0.8);
-      lit.addColorStop(0, `rgba(255,${100 + Math.floor(rand() * 60)},30,${0.2 * near})`);
-      lit.addColorStop(1, 'rgba(255,90,20,0)');
-      g.save();
-      g.translate(x, y + h * 0.5);
-      g.scale(1, 0.22);
-      g.translate(-x, -(y + h * 0.5));
-      g.fillStyle = lit;
-      g.fillRect(x - w, y - w, w * 2, w * 2);
-      g.restore();
+  };
+  // 뭉게구름: 아래가 살짝 회청색으로 그늘진 하얀 덩어리 무리. 지평선 쪽일수록 납작하고 촘촘하다
+  for (let c = 0; c < 17; c++) {
+    const cx = rand() * W;
+    const cy = H * (0.2 + rand() * 0.27);
+    const size = 0.7 + rand() * 0.9;
+    const n = 7 + Math.floor(rand() * 7);
+    const pts: [number, number, number][] = [];
+    for (let i = 0; i < n; i++) {
+      const k = (i / (n - 1)) * 2 - 1;
+      pts.push([cx + k * 70 * size + (rand() - 0.5) * 24, cy + (rand() - 0.5) * 9 * size - (1 - Math.abs(k)) * 9 * size, (20 + rand() * 24) * size * (1 - Math.abs(k) * 0.35)]);
     }
+    for (const [x, y, r] of pts) puff(x, y + r * 0.35, r * 1.05, 0.62, '150,176,208', 0.34);
+    for (const [x, y, r] of pts) puff(x, y, r, 0.72, '255,255,255', 0.92);
+    for (const [x, y, r] of pts) puff(x - r * 0.12, y - r * 0.22, r * 0.55, 0.7, '255,255,255', 0.5);
   }
-  // 흩날리는 불씨 별
-  for (let i = 0; i < 260; i++) {
+  // 높은 곳의 가는 구름결
+  for (let i = 0; i < 22; i++) {
     const x = rand() * W;
-    const y = rand() * H * 0.42;
-    g.fillStyle = `rgba(255,${150 + Math.floor(rand() * 80)},80,${0.15 + rand() * 0.4})`;
-    g.fillRect(x, y, 1.5, 1.5);
+    const y = H * (0.06 + rand() * 0.16);
+    puff(x, y, 70 + rand() * 90, 0.09, '255,255,255', 0.2 + rand() * 0.15);
   }
+  return tex(cv);
+}
+
+/** 해: 둥근 원반과 부드러운 빛번짐 */
+function makeSunTex(core: boolean) {
+  const S = 256;
+  const { cv, g } = canvas(S);
+  const gg = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  if (core) {
+    gg.addColorStop(0, 'rgba(255,255,250,1)');
+    gg.addColorStop(0.5, 'rgba(255,252,235,0.98)');
+    gg.addColorStop(0.62, 'rgba(255,244,205,0.5)');
+    gg.addColorStop(1, 'rgba(255,240,200,0)');
+  } else {
+    gg.addColorStop(0, 'rgba(255,248,220,0.55)');
+    gg.addColorStop(0.25, 'rgba(255,240,200,0.28)');
+    gg.addColorStop(0.6, 'rgba(255,232,190,0.08)');
+    gg.addColorStop(1, 'rgba(255,230,180,0)');
+  }
+  g.fillStyle = gg;
+  g.fillRect(0, 0, S, S);
   return tex(cv);
 }
 
@@ -267,6 +284,9 @@ export class Volcano {
   private altarMat: THREE.MeshStandardMaterial;
   private rimMat: THREE.MeshBasicMaterial;
   private sky: THREE.Mesh;
+  private sunDisc: THREE.Sprite;
+  private sunGlow: THREE.Sprite;
+  private sunDir = new THREE.Vector3(...VOLC.sunPos).normalize();
   private embers: THREE.Points;
   private emberSpeed: Float32Array;
   private lights: { l: THREE.PointLight; base: number; ph: number }[] = [];
@@ -288,6 +308,16 @@ export class Volcano {
     this.sky.renderOrder = -10;
     this.sky.frustumCulled = false;
     root.add(this.sky);
+    const mkSun = (core: boolean, size: number) => {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeSunTex(core), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, toneMapped: false }));
+      sp.scale.set(size, size, 1);
+      sp.renderOrder = -9;
+      sp.frustumCulled = false;
+      root.add(sp);
+      return sp;
+    };
+    this.sunGlow = mkSun(false, 300);
+    this.sunDisc = mkSun(true, 46);
 
     /* 용암 호수 */
     this.lavaTex = makeLava(rand);
@@ -345,13 +375,13 @@ export class Volcano {
     }
 
     /* 멀리 불을 뿜는 화산 */
-    const vol = new THREE.Mesh(new THREE.ConeGeometry(120, 150, 28, 1, true), new THREE.MeshBasicMaterial({ color: 0x1a0a06, fog: false, toneMapped: false }));
+    const vol = new THREE.Mesh(new THREE.ConeGeometry(120, 150, 28, 1, true), new THREE.MeshBasicMaterial({ color: 0x3a2a24, fog: false, toneMapped: false }));
     vol.position.set(-220, 70, -320);
     root.add(vol);
     const crater = new THREE.Mesh(new THREE.CircleGeometry(24, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 0.7, 0.2), fog: false, toneMapped: false }));
     crater.position.set(-220, 146, -320);
     root.add(crater);
-    this.plume = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.2, 0.45, 0.12), transparent: true, opacity: 0.3, fog: false, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
+    this.plume = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.55, 0.5, 0.5), transparent: true, opacity: 0.3, fog: false, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
     const plume = new THREE.Mesh(new THREE.CylinderGeometry(20, 55, 190, 16, 1, true).translate(0, 95, 0), this.plume);
     plume.position.set(-220, 146, -320);
     root.add(plume);
@@ -403,7 +433,7 @@ export class Volcano {
     this.altarMat.emissiveIntensity = 0.8 + 0.35 * pulse + this.flare * 0.5;
     this.rimMat.color.setRGB(1, 0.42, 0.1).multiplyScalar(1.4 + 0.5 * pulse);
     this.lavaMat.color.setRGB(1.1 + this.flare * 0.4, 0.8 + this.flare * 0.2, 0.65);
-    this.plume.opacity = 0.24 + 0.08 * Math.sin(t * 0.8) + this.flare * 0.3;
+    this.plume.opacity = 0.34 + 0.08 * Math.sin(t * 0.8) + this.flare * 0.15;
     for (const li of this.lights) {
       const f = 0.88 + 0.12 * Math.sin(t * 9 + li.ph) + 0.06 * Math.sin(t * 23 + li.ph * 2);
       li.l.intensity = li.base * f * (1 + this.flare * 0.5);
@@ -415,6 +445,8 @@ export class Volcano {
     }
     this.sky.position.set(fx, 0, fz);
     this.sky.rotation.y += dt * 0.004;
+    for (const sp of [this.sunDisc, this.sunGlow]) sp.position.set(fx + this.sunDir.x * 430, this.sunDir.y * 430, fz + this.sunDir.z * 430);
+    (this.sunGlow.material as THREE.SpriteMaterial).opacity = 0.9 + this.flare * 0.1;
 
     const a = this.embers.geometry.getAttribute('position') as THREE.BufferAttribute;
     for (let i = 0; i < a.count; i++) {

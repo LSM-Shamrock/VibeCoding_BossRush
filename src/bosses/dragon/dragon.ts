@@ -428,7 +428,8 @@ export class Dragon implements Boss {
     const da = this.orbitDir * 0.62;
     const gx = this.cx + Math.cos(a + da) * Rt;
     const gz = this.cz + Math.sin(a + da) * Rt;
-    const gy = alt + 2.2 * Math.sin(this.t * 0.65 + 1);
+    // 몸이 한 바퀴보다 길어서, 고도를 천천히 오르내려 몸통이 자기 몸과 겹치지 않게 한다
+    const gy = alt + 5.5 * Math.sin(this.t * 0.31) + 1.6 * Math.sin(this.t * 0.65 + 1);
     const wantYaw = Math.atan2(gx - p.x, gz - p.z);
     const rate = clamp(wrapPi(wantYaw - this.yaw) * 2.4, -turn, turn);
     this.yawRate = approach(this.yawRate, rate, 6, dt);
