@@ -30,7 +30,9 @@ const LEG_COUNT = 4;
 const GROUPS = [0, 1, 1, 0];
 const SIDE = [1, -1, 1, -1];
 const FORE = [true, true, false, false];
-const HOME_ANGLE = [0.5, 0.5, -0.35, -0.35]; // 옆 방향 기준, 양수 = 앞쪽 (거미의 HOME_ANGLE 과 같은 의미)
+// 옆 방향 기준, 양수 = 앞쪽. 앞에서 볼 때만 ㄱ자가 되던 다리를 머리 쪽 안쪽으로 45° 돌려, 옆에서도 ㄱ자로 보이게 했다
+const TURN = Math.PI / 4;
+const HOME_ANGLE = [0.5 + TURN, 0.5 + TURN, -0.35 + TURN, -0.35 + TURN];
 const HOME_R = 15;
 const HOME_DROP = 18;
 
@@ -49,6 +51,12 @@ export class DragonLegs {
   private lower: THREE.Mesh[] = [];
   private knees: THREE.Mesh[] = [];
   private hipPrev: V3[] = [];
+  private paws: THREE.Group[] = [];
+  private clawMat: THREE.MeshStandardMaterial;
+  private pawGeos: THREE.BufferGeometry[] = [];
+  private mb = new THREE.Matrix4();
+  private bx = new V3();
+  private bz = new V3();
   private legMat: THREE.MeshStandardMaterial;
   private kneeMat: THREE.MeshStandardMaterial;
   private geos: THREE.BufferGeometry[];
@@ -72,7 +80,13 @@ export class DragonLegs {
     // 색만 용에 맞춰 바꿨다 (거미: 0x35160e / 무릎 0xc08a34)
     this.legMat = new THREE.MeshStandardMaterial({ color: 0x6a1a12, emissive: 0x3a0c06, roughness: 0.74, metalness: 0.08, flatShading: true });
     this.kneeMat = new THREE.MeshStandardMaterial({ color: 0xd9a441, emissive: 0x4a2806, roughness: 0.74, metalness: 0.08, flatShading: true });
+    this.clawMat = new THREE.MeshStandardMaterial({ color: 0xe6dcc2, emissive: 0x1a1608, roughness: 0.6, metalness: 0.1, flatShading: true });
+    const toeGeo = new THREE.CylinderGeometry(0.5, 0.8, 1, 6).translate(0, 0.5, 0).rotateX(Math.PI / 2); // +Z 방향
+    const clawGeo = new THREE.ConeGeometry(0.8, 1, 5).translate(0, 0.5, 0).rotateX(Math.PI / 2);
+    const palmGeo = new THREE.SphereGeometry(1, 9, 7);
+    this.pawGeos.push(toeGeo, clawGeo, palmGeo);
     for (let i = 0; i < LEG_COUNT; i++) {
+      this.paws.push(this.buildPaw(palmGeo, toeGeo, clawGeo));
       this.homes.push(new V3());
       this.hipPrev.push(new V3());
       const up = new THREE.Mesh(upperGeo, this.legMat);
@@ -88,6 +102,41 @@ export class DragonLegs {
       this.lower.push(lo);
       this.knees.push(kn);
     }
+  }
+
+  /** 손발: 손바닥 + 발가락 4개(마디 2개) + 발톱. 로컬: +Z 앞, +Y 위 */
+  private buildPaw(palmGeo: THREE.BufferGeometry, toeGeo: THREE.BufferGeometry, clawGeo: THREE.BufferGeometry) {
+    const g = new THREE.Group();
+    const mk = (geo: THREE.BufferGeometry, mat: THREE.Material, parent: THREE.Object3D) => {
+      const m = new THREE.Mesh(geo, mat);
+      m.castShadow = true;
+      m.frustumCulled = false;
+      parent.add(m);
+      return m;
+    };
+    const palm = mk(palmGeo, this.legMat, g);
+    palm.scale.set(3.6, 1.7, 4.4);
+    for (let d = 0; d < 4; d++) {
+      const k = d - 1.5;
+      const len = d === 0 || d === 3 ? 0.85 : 1;
+      const dg = new THREE.Group();
+      dg.position.set(k * 2.1, -0.2, 3.4);
+      dg.rotation.set(0.28, k * 0.13, 0);
+      g.add(dg);
+      mk(toeGeo, this.legMat, dg).scale.set(1.5, 1.5, 4.6 * len);
+      const d2 = new THREE.Group();
+      d2.position.z = 4.6 * len;
+      d2.rotation.x = 0.5;
+      dg.add(d2);
+      mk(toeGeo, this.legMat, d2).scale.set(1.15, 1.15, 3.6 * len);
+      const cl = new THREE.Group();
+      cl.position.z = 3.6 * len;
+      cl.rotation.x = 0.4;
+      d2.add(cl);
+      mk(clawGeo, this.clawMat, cl).scale.set(1.15, 1.15, 3.4);
+    }
+    this.group.add(g);
+    return g;
   }
 
   /** fore: 앞다리 몸통 프레임, hind: 뒷다리 몸통 프레임. lie: 쓰러져 바닥에 엎드림 */
@@ -167,17 +216,29 @@ export class DragonLegs {
       placeSegment(this.lower[i], this.knee, this.end, LO_T);
       this.knees[i].position.copy(this.knee);
       this.knees[i].scale.setScalar(KNEE_R);
+      // 손발: 발끝에 놓고, 몸 앞쪽을 향해 바닥과 나란히 편다
+      const paw = this.paws[i];
+      paw.position.copy(this.end);
+      this.bz.copy(f.T);
+      this.bz.y = 0;
+      if (this.bz.lengthSq() < 1e-6) this.bz.set(0, 0, 1);
+      this.bz.normalize();
+      this.bx.set(0, 1, 0).cross(this.bz);
+      this.mb.makeBasis(this.bx, this.tmp.set(0, 1, 0), this.bz);
+      paw.quaternion.setFromRotationMatrix(this.mb);
     }
-    void this.tmp;
   }
 
   setVisible(v: boolean) {
     for (const m of [...this.upper, ...this.lower, ...this.knees]) m.visible = v;
+    for (const p of this.paws) p.visible = v;
   }
 
   dispose() {
     for (const m of [...this.upper, ...this.lower, ...this.knees]) this.group.remove(m);
-    for (const g of this.geos) g.dispose();
+    for (const p of this.paws) this.group.remove(p);
+    for (const g of [...this.geos, ...this.pawGeos]) g.dispose();
+    this.clawMat.dispose();
     this.legMat.dispose();
     this.kneeMat.dispose();
   }
