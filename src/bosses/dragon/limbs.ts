@@ -159,6 +159,11 @@ export class DragonLimb {
   private sc = new V3();
   private pos = new V3();
   private mT = new V3();
+  private dn = new V3();
+  private zz = new V3();
+  private mb = new THREE.Matrix4();
+  private nP = new V3();
+  private planar = false;
   private mC = new V3();
 
   constructor(private group: THREE.Group, private kit: LimbKit, readonly side: number, readonly fore: boolean) {
@@ -252,6 +257,22 @@ export class DragonLimb {
     const d1 = local(0, this.d1);
     const d2 = local(3, this.d2);
     const d3 = local(6, this.d3);
+    this.planar = !this.fore;
+    if (this.planar) {
+      // 뒷다리는 실제 네 발 짐승처럼 한 평면(몸 앞뒤 방향 + 아래, 살짝 바깥으로 기운 면) 안에서만 접히는 경첩 관절이다.
+      // 엉덩이 · 무릎 · 발목(비절)이 각도 하나씩만 갖고, 바깥으로 틀어지는 성분은 버린다.
+      const sp = 0.3;
+      this.dn.copy(fr.U).multiplyScalar(-Math.cos(sp)).addScaledVector(fr.R, s * Math.sin(sp)).normalize();
+      this.nP.crossVectors(this.dn, fr.T).normalize();
+      const ang = (o: number) => Math.atan2(cu[o + 2], -cu[o + 1]);
+      const a1 = ang(0);
+      const a2 = Math.min(ang(3), a1); // 무릎: 정강이는 허벅지보다 앞으로 꺾이지 않는다 (뒤로만 굽는다)
+      const a3 = Math.max(ang(6), a2); // 발목: 발은 정강이보다 뒤로 꺾이지 않는다 (앞으로만 굽는다)
+      const put = (a: number, out: V3) => out.copy(this.dn).multiplyScalar(Math.cos(a)).addScaledVector(fr.T, Math.sin(a)).normalize();
+      put(a1, d1);
+      put(a2, d2);
+      put(a3, d3);
+    }
     const spread = Math.min(1, Math.max(0, cu[9]));
     const curl = Math.min(1.1, Math.max(0, cu[10]));
 
@@ -290,7 +311,7 @@ export class DragonLimb {
       if (L < 1e-4) return;
       this.t1.multiplyScalar(1 / L);
       m.position.copy(this.pos);
-      m.quaternion.setFromUnitVectors(UP, this.t1);
+      this.orient(m.quaternion, this.t1);
       const rr = r * (1 - 0.38 * t0) * 0.98;
       m.scale.set(rr, L * len, rr);
     };
@@ -307,7 +328,7 @@ export class DragonLimb {
         const m = this.cuffs[idx];
         this.t1.subVectors(b, a).normalize();
         m.position.copy(at).addScaledVector(this.t1, -0.5);
-        m.quaternion.setFromUnitVectors(UP, this.t1);
+        this.orient(m.quaternion, this.t1);
         m.scale.set(rr, 1, rr);
       };
       seam(6, j[0], j[1], this.mT, this.R[0] * 0.56);
@@ -390,8 +411,25 @@ export class DragonLimb {
       return;
     }
     this.t1.multiplyScalar(1 / L);
-    m.quaternion.setFromUnitVectors(UP, this.t1);
+    this.orient(m.quaternion, this.t1);
     m.scale.set(r, L, r);
+  }
+
+  /** 방향 dir 로 +y 를 맞춘다. 뒷다리는 구르기(roll) 축이 돌지 않게 관절 평면의 법선을 x 축으로 고정한다 */
+  private orient(q: THREE.Quaternion, dir: V3) {
+    if (!this.planar) {
+      q.setFromUnitVectors(UP, dir);
+      return;
+    }
+    const z = this.zz.crossVectors(this.nP, dir);
+    if (z.lengthSq() < 1e-6) {
+      q.setFromUnitVectors(UP, dir);
+      return;
+    }
+    z.normalize();
+    // x = 평면 법선, y = dir, z = x × y
+    this.mb.makeBasis(this.nP, dir, z);
+    q.setFromRotationMatrix(this.mb);
   }
 
   /** 손(발) 끝 위치: 이펙트용 */
