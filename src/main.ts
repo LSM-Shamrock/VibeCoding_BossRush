@@ -392,7 +392,6 @@ class Game implements Host {
       god: this.player.god,
       muted: this.sfx.muted,
       bossAttacks: this.boss?.attacksOn ?? true,
-      slowed: this.player.slowT > 0 && !this.player.dead,
       fps: this.fps,
       debug: this.debugOn && this.boss ? this.boss.status : '',
     });

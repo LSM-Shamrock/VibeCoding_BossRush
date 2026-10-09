@@ -59,7 +59,7 @@
       @keyframes blink { from { opacity: .55; } to { opacity: 1; } }
 
       /* 좌하단: 등불(체력) / 대시 / 특수 */
-      #bl { position: absolute; left: 22px; bottom: 22px; background: var(--panel); border: 1px solid var(--edge); border-radius: 6px; padding: 12px 14px 10px; width: max-content; backdrop-filter: blur(3px); box-shadow: inset 0 0 0 3px rgba(10,3,1,.35); }
+      #bl { position: absolute; right: 22px; bottom: 22px; background: var(--panel); border: 1px solid var(--edge); border-radius: 6px; padding: 12px 14px 10px; width: max-content; backdrop-filter: blur(3px); box-shadow: inset 0 0 0 3px rgba(10,3,1,.35); }
       #lamps { display: flex; gap: 8px; margin-bottom: 8px; }
       /* 체력(불꽃): 켜진 칸은 일렁이며 타오르고, 꺼진 칸은 점선 윤곽만 남은 빈 불꽃 */
       .lamp { position: relative; width: 30px; height: 38px; }
@@ -127,7 +127,6 @@
       @keyframes bannerIn { 0% { opacity: 0; transform: scale(1.18); } 10% { opacity: 1; transform: scale(1); } 78% { opacity: 1; } 100% { opacity: 0; } }
 
       /* 디버프 표시 */
-      #debuff { position: absolute; left: 22px; bottom: 150px; padding: 6px 12px; border-radius: 6px; background: rgba(255,236,200,.16); border: 1px solid rgba(255,236,200,.55); color: #fff1d8; font-size: 13px; font-weight: 700; letter-spacing: .06em; animation: blink .4s infinite alternate; }
       .dbg { color: #ffb347; }
 
 
@@ -196,7 +195,6 @@
       </div>
 
       <div id="banner"><div class="bt" id="bt"></div><div class="bs" id="bs"></div></div>
-      <div id="debuff" class="hidden">거미줄에 걸렸다! <kbd id="kdebuff">Space</kbd> 대시로 끊어내기</div>
       <div id="cross" class="hidden"><i></i><b></b></div>
       <div id="lockon" class="hidden"><i></i></div>
       <div id="toast"></div>

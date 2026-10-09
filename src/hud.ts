@@ -14,7 +14,6 @@ export interface HudState {
   god: boolean;
   muted: boolean;
   bossAttacks: boolean;
-  slowed: boolean;
   fps: number;
   debug: string;
 }
@@ -44,10 +43,8 @@ export class Hud {
   private bannerEl = $('banner');
   private bannerT = $('bt');
   private bannerS = $('bs');
-  private debuff = $('debuff');
   private kDash = $('kdash');
   private kSpecial = $('kspecial');
-  private kDebuff = $('kdebuff');
   private toastTimer = 0;
   private bannerTimer = 0;
   private v = new THREE.Vector3();
@@ -95,7 +92,6 @@ export class Hud {
     this.dashFill.classList.toggle('ready', s.dashReady >= 1);
     this.spFill.style.width = `${Math.round(s.gauge * 100)}%`;
     this.spWrap.classList.toggle('ready', s.gauge >= 1);
-    this.debuff.classList.toggle('hidden', !s.slowed);
 
     const b = s.boss;
     this.boss.classList.toggle('hidden', !b);
@@ -166,7 +162,6 @@ export class Hud {
   setKeyLabels(dash: string, special: string) {
     this.kDash.textContent = dash;
     this.kSpecial.textContent = special;
-    this.kDebuff.textContent = dash;
   }
   hideOverlay() {
     this.overlay.classList.add('hidden');
