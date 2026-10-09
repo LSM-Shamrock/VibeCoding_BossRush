@@ -15,14 +15,15 @@ type V3 = THREE.Vector3;
  */
 
 /** 거미 대비 배율 */
-const KL = 3.0; // 길이
-const KT = 8.0; // 굵기
+const KL = 4.5; // 길이 (원통)
+const KT = 16.0; // 굵기 (원통)
+const KS = 8.0; // 무릎 구슬 (그대로)
 // 거미 값 그대로: L1 2.6, L2 4.7, 윗다리 굵기 0.3, 아랫다리 0.27, 무릎 구 0.4
 const L1 = 2.6 * KL;
 const L2 = 4.7 * KL;
 const UP_T = 0.3 * KT;
 const LO_T = 0.27 * KT;
-const KNEE_R = KT;
+const KNEE_R = KS;
 
 const LEG_COUNT = 4;
 // 앞다리 2 · 뒷다리 2. 대각선끼리 한 조 (거미의 [0,1,0,1,1,0,1,0] 와 같은 대각선 규칙)
@@ -30,8 +31,8 @@ const GROUPS = [0, 1, 1, 0];
 const SIDE = [1, -1, 1, -1];
 const FORE = [true, true, false, false];
 const HOME_ANGLE = [0.5, 0.5, -0.35, -0.35]; // 옆 방향 기준, 양수 = 앞쪽 (거미의 HOME_ANGLE 과 같은 의미)
-const HOME_R = 10;
-const HOME_DROP = 12;
+const HOME_R = 15;
+const HOME_DROP = 18;
 
 export interface LegFrame {
   c: V3;
