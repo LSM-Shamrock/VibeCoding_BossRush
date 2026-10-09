@@ -38,7 +38,15 @@ const FLOORS = BOSSES.length;
 /** 1층 기록은 예전 키를 그대로 쓴다 */
 const bestKey = (floor: number) => (floor === 1 ? 'deepnest.best.spider' : `deepnest.best.f${floor}`);
 
-type GameState = 'title' | 'intro' | 'play' | 'victory' | 'over' | 'clear';
+/** 보스 시작 화면(타이틀·다음 보스)에 띄울 정보 */
+const FLOOR_INFO = [
+  { label: '1층 · 거미굴', name: CFG.spider.name },
+  { label: CFG.serpent.floorLabel, name: CFG.serpent.name },
+];
+/** 클리어 화면에서 캐릭터가 움직이지 못하게 하는 빈 입력 */
+const IDLE_INPUT = new Proxy({}, { get: () => () => false }) as unknown as Input;
+
+type GameState = 'title' | 'intro' | 'play' | 'victory' | 'over' | 'clear' | 'next';
 
 const fmtTime = (t: number) => {
   const m = Math.floor(t / 60);
@@ -152,7 +160,7 @@ class Game implements Host {
     });
 
     this.player.onDeath = () => {
-      if (this.state === 'victory' || this.state === 'clear') return;
+      if (this.state === 'victory' || this.state === 'clear' || this.state === 'next') return;
       this.state = 'over';
       this.showCursor(true);
       this.overShown = false;
@@ -168,9 +176,10 @@ class Game implements Host {
        <span style="color:#a8957c">예고선과 바닥 마커가 보이면 피하고, 거미의 몸이 곧 신호다. 배(주황빛)가 약점.</span><br>
        <span style="color:#a8957c">Esc 로 일시정지 — 그 화면에서 키를 바꿀 수 있습니다.</span><br>
        ${this.diffPicker()}
-       <div class="go">클릭하여 시작</div>`,
+       <button type="button" class="startbtn">시작</button>`,
     );
     this.bindDiff();
+    this.bindStart();
     document.getElementById('overlay')!.addEventListener('click', () => this.onOverlayClick());
     window.addEventListener('blur', () => {
       if (!this.paused && (this.state === 'play' || this.state === 'intro')) this.setPaused(true);
@@ -255,13 +264,46 @@ class Game implements Host {
     this.sfx.unlock();
     if (this.paused) {
       this.setPaused(false);
-    } else if (this.state === 'title') {
-      this.startFight(true);
     } else if (this.state === 'over' && this.overShown) {
       this.startFight(false);
     } else if (this.state === 'clear') {
-      this.startFight(true, this.floor < FLOORS ? this.floor + 1 : this.floor);
+      this.showNext(); // 클리어 화면 → 다음 보스 소개 + 난이도 선택 화면
     }
+    // 타이틀/다음 보스 화면은 '시작' 버튼(또는 Enter)으로만 시작한다
+  }
+
+  /** 타이틀·다음 보스 화면에서 고른 난이도로 보스전을 시작한다 */
+  private startPending() {
+    this.sfx.unlock();
+    if (this.state === 'title') this.startFight(true);
+    else if (this.state === 'next') this.startFight(true, this.nextFloor);
+  }
+
+  private bindStart() {
+    const b = document.querySelector<HTMLButtonElement>('#ovbody .startbtn');
+    b?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.startPending();
+    });
+  }
+
+  private nextFloor = 1;
+
+  /** 다음 보스 시작 화면: 보스 이름 + 난이도 선택 + 시작 버튼 */
+  private showNext() {
+    const more = this.floor < FLOORS;
+    this.nextFloor = more ? this.floor + 1 : this.floor;
+    const info = FLOOR_INFO[this.nextFloor - 1];
+    this.state = 'next';
+    this.hud.showOverlay(
+      info.label,
+      `<span style="font-size:22px;letter-spacing:.2em"><b>${info.name}</b></span><br>
+       <span style="color:#a8957c">${more ? '더 깊은 곳의 보스가 기다립니다. 체력은 가득 채워집니다.' : '다음 층의 보스(용)는 준비 중입니다. 같은 보스에게 다시 도전합니다.'}</span><br>
+       ${this.diffPicker()}
+       <button type="button" class="startbtn">시작</button>`,
+    );
+    this.bindDiff();
+    this.bindStart();
   }
 
   /** 쓰러졌거나 보스를 잡았을 땐 포인터 락을 풀고 마우스 커서를 다시 보여준다 */
@@ -391,17 +433,20 @@ class Game implements Host {
       }
     }
     this.state = 'clear';
+    this.player.vel.set(0, 0, 0);
+    this.player.dashT = 0;
     const more = floor < FLOORS;
     this.hud.showOverlay(
       `${floor}층 클리어`,
       `<b>${this.boss?.title ?? ''}</b> 격파<br>
        소요 시간 <b>${fmtTime(t)}</b>${isBest ? ' <span style="color:#ffd27a">· 최고 기록!</span>' : ` <span style="color:#a8957c">· 최고 ${fmtTime(best)}</span>`}<br>
        피격 <b>${this.player.hitsTaken}</b>회<br>
-       <span style="color:#a8957c">${more ? `다음은 ${floor + 1}층 — 더 깊은 곳의 보스가 기다립니다. 체력은 가득 채워집니다.` : '다음 층의 보스(용)는 준비 중입니다.'}</span><br>
-       ${this.diffPicker()}
-       <div class="go">${this.binds.label('retry')} 키 또는 클릭으로 ${more ? `${floor + 1}층으로` : '다시 도전'}</div>`,
+       <button type="button" class="startbtn nextbtn">다음</button>`,
     );
-    this.bindDiff();
+    document.querySelector<HTMLButtonElement>('#ovbody .nextbtn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.showNext();
+    });
   }
 
   private refreshKeyLabels() {
@@ -440,7 +485,8 @@ class Game implements Host {
     this.time += raw;
 
     // 키 입력 (오버레이 상태와 무관한 것)
-    if (this.input.hit('Enter') && (this.state === 'title' || this.paused)) this.onOverlayClick();
+    if (this.input.hit('Enter') && (this.state === 'title' || this.state === 'next')) this.startPending();
+    else if (this.input.hit('Enter') && this.paused) this.onOverlayClick();
     if ((this.state === 'over' && this.overShown) || this.state === 'clear') {
       if (this.input.tapped('retry') || this.input.hit('Enter')) this.onOverlayClick();
     }
@@ -481,9 +527,10 @@ class Game implements Host {
     this.updateAim();
     // 일시정지 중에는 게임 입력(대시/특수기 등)을 처리하지 않는다 — 키 설정 화면에서 누른 키가 게임에 새지 않도록
     if (this.state !== 'title' && !this.paused) {
-      this.player.ceaseFire = this.state === 'victory' || this.state === 'clear';
-      this.player.trigger = this.input.mouseDown && (this.input.locked || this.manual);
-      this.player.update(dt, this.input, this.aim);
+      const still = this.state === 'clear' || this.state === 'next'; // 결과·시작 화면에서는 캐릭터가 움직이지 않는다
+      this.player.ceaseFire = this.state === 'victory' || still;
+      this.player.trigger = !still && this.input.mouseDown && (this.input.locked || this.manual);
+      this.player.update(dt, still ? IDLE_INPUT : this.input, this.aim);
       this.player.arrows.update(dt);
       this.boss?.update(dt);
       this.bossFlames(dt);
@@ -595,7 +642,7 @@ class Game implements Host {
     const C = CFG.camera;
     const look = this.lookTmp;
     this.input.takeLook(look);
-    const playing = !this.paused && this.state !== 'title' && this.state !== 'over' && this.state !== 'clear';
+    const playing = !this.paused && this.state !== 'title' && this.state !== 'over' && this.state !== 'clear' && this.state !== 'next';
     const b = this.boss && this.boss.alive ? this.boss : null;
     if (this.input.hit('MouseMiddle') || this.input.tapped('lockon')) {
       if (playing && !this.input.hit('Escape')) {
