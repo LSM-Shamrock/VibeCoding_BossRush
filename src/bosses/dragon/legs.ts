@@ -19,11 +19,12 @@ const KL = 4.5; // 길이 (원통)
 const KT = 16.0; // 굵기 (원통)
 const KS = 8.0; // 무릎 구슬 (그대로)
 // 거미 값 그대로: L1 2.6, L2 4.7, 윗다리 굵기 0.3, 아랫다리 0.27, 무릎 구 0.4
-const L1 = 2.6 * KL;
-const L2 = 4.7 * KL;
-const UP_T = 0.3 * KT;
-const LO_T = 0.27 * KT;
-const KNEE_R = KS;
+const LEG_S = 0.75; // 발을 뺀 다리 파츠(원통 · 무릎 구슬) 전체 배율
+const L1 = 2.6 * KL * LEG_S; // 허벅지와 종아리 길이를 같게 (긴 쪽 4.7 을 짧은 쪽 2.6 에 맞춤)
+const L2 = 2.6 * KL * LEG_S;
+const UP_T = 0.3 * KT * LEG_S;
+const LO_T = 0.27 * KT * LEG_S;
+const KNEE_R = KS * LEG_S;
 
 const LEG_COUNT = 4;
 // 앞다리 2 · 뒷다리 2. 대각선끼리 한 조 (거미의 [0,1,0,1,1,0,1,0] 와 같은 대각선 규칙)
@@ -33,8 +34,8 @@ const FORE = [true, true, false, false];
 // 옆 방향 기준, 양수 = 앞쪽. 앞에서 볼 때만 ㄱ자가 되던 다리를 머리 쪽 안쪽으로 45° 돌려, 옆에서도 ㄱ자로 보이게 했다
 const TURN = Math.PI / 4;
 const HOME_ANGLE = [0.5 + TURN, 0.5 + TURN, -0.35 + TURN, -0.35 + TURN];
-const HOME_R = 15;
-const HOME_DROP = 18;
+const HOME_R = 9;
+const HOME_DROP = 10.8;
 
 /**
  * 가로(축을 지나는 수평면)로 반을 자른 원뿔대. +Z 방향으로 뻗고, 아랫면(y=0)이 평평하며 위쪽 반만 남는다.
@@ -207,9 +208,9 @@ export class DragonLegs {
     }
 
     this.gait.update(dt, this.homes, this.vel, {
-      threshold: 1.25 * KL,
+      threshold: 1.25 * KL * LEG_S,
       stepTime: Math.max(0.12, 0.2 - Math.hypot(this.vel.x, this.vel.z) * 0.012),
-      lift: 1.05 * KL,
+      lift: 1.05 * KL * LEG_S,
       lead: 0.12,
     });
 
