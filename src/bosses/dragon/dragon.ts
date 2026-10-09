@@ -434,14 +434,15 @@ export class Dragon implements Boss {
     const gx = this.cx + Math.cos(a + da) * Rt;
     const gz = this.cz + Math.sin(a + da) * Rt;
     // 몸이 한 바퀴보다 길어서, 고도를 천천히 오르내려 몸통이 자기 몸과 겹치지 않게 한다
-    const gy = alt + 5.5 * Math.sin(this.t * 0.31) + 1.6 * Math.sin(this.t * 0.65 + 1);
+    // 상하 이동을 적극적으로: 크게 솟구쳤다 내려꽂히기를 반복한다 (몸이 한 바퀴보다 길어서 몸통이 자기 몸과 겹치지 않는 효과도 있다)
+    const gy = alt + 12 * Math.sin(this.t * 0.46) + 3.5 * Math.sin(this.t * 0.97 + 1);
     const wantYaw = Math.atan2(gx - p.x, gz - p.z);
     const rate = clamp(wrapPi(wantYaw - this.yaw) * 2.4, -turn, turn);
     this.yawRate = approach(this.yawRate, rate, 6, dt);
     this.yaw = wrapPi(this.yaw + rate * dt);
     const hd = Math.max(4, Math.hypot(gx - p.x, gz - p.z));
-    const wantPitch = clamp(Math.atan2(gy - p.y, hd), -0.5, 0.5);
-    this.pitch += clamp((wantPitch - this.pitch) * 2.2, -0.9, 0.9) * dt;
+    const wantPitch = clamp(Math.atan2(gy - p.y, hd), -0.8, 0.8);
+    this.pitch += clamp((wantPitch - this.pitch) * 2.6, -1.1, 1.1) * dt;
     this.speed = approach(this.speed, sp, 1.6, dt);
     const cp = Math.cos(this.pitch);
     p.x += Math.sin(this.yaw) * cp * this.speed * dt;
