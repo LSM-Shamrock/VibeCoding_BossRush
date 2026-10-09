@@ -771,10 +771,18 @@ export class Pond {
     const poolTex = makeGlowTex();
     const NL = Math.round(8 * K);
     const LS = 1.7; // 넓어진 석단에서도 멀리서 읽히도록 석등을 키운다
+    // 석등 둘레 반지름: 이무기 머리가 갈 수 있는 가장 바깥(석단 + rim.out + 3.5) 밖
+    const LD = R + CFG.serpent.rim.out + 3.5 + 4.6;
+    const lanternBase = new THREE.CylinderGeometry(2.3, 2.9, 3, 10);
     for (let k = 0; k < NL; k++) {
       const a = ((k + 0.5) / NL) * TAU;
-      const lx = Math.cos(a) * (R + 0.95);
-      const lz = Math.sin(a) * (R + 0.95);
+      const lx = Math.cos(a) * LD;
+      const lz = Math.sin(a) * LD;
+      // 못 위에 솟은 돌 받침 (이무기가 석단 바깥 둘레를 돌 때 몸에 겹치지 않도록 멀리 세운다)
+      const base = new THREE.Mesh(lanternBase, slate);
+      base.position.set(lx, -1.5, lz);
+      base.receiveShadow = true;
+      root.add(base);
       const grp = new THREE.Group();
       grp.position.set(lx, 0, lz);
       grp.rotation.y = rand() * TAU;
@@ -794,7 +802,7 @@ export class Pond {
       grp.add(flame);
       const poolMat = new THREE.MeshBasicMaterial({ map: poolTex, color: 0x4aa8ff, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
       const pool = new THREE.Mesh(new THREE.PlaneGeometry(26, 26).rotateX(-Math.PI / 2), poolMat);
-      pool.position.set(lx - Math.cos(a) * 5.4, 0.03, lz - Math.sin(a) * 5.4);
+      pool.position.set(lx - Math.cos(a) * 2, WATER_Y + 0.06, lz - Math.sin(a) * 2);
       root.add(pool);
       this.lanterns.push({ flame, x: lx, z: lz, pool, ph: rand() * 20 });
     }
@@ -1068,8 +1076,8 @@ export class Pond {
     for (const s of this.lights) {
       const lt = this.lanterns[s.idx];
       const ld = Math.hypot(lt.x, lt.z) || 1;
-      s.l.position.x += (lt.x - (lt.x / ld) * 3.2 - s.l.position.x) * kk;
-      s.l.position.z += (lt.z - (lt.z / ld) * 3.2 - s.l.position.z) * kk;
+      s.l.position.x += ((lt.x / ld) * (R - 3.2) - s.l.position.x) * kk; // 석등 쪽 석단 안쪽 가장자리에서 비춘다
+      s.l.position.z += ((lt.z / ld) * (R - 3.2) - s.l.position.z) * kk;
       s.l.intensity = 46 * flick(lt);
     }
     for (const w of this.wisps) {
