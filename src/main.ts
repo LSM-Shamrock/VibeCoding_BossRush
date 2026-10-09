@@ -11,12 +11,13 @@ import { Fx } from './fx';
 import { Arena } from './arena';
 import { Player } from './player';
 import { Spider } from './bosses/spider/spider';
-import { SEQUENCE_ATTACKS } from './bosses/spider/attacks';
+import { Serpent } from './bosses/serpent/serpent';
 import { Hud } from './hud';
 import { Keybinds } from './keybinds';
 import { KeyPanel } from './keypanel';
-import type { FloatKind, Host, Target } from './types';
+import type { Boss, FloatKind, Host, Target } from './types';
 import { PAL } from './palette';
+import { WORLD } from './world';
 
 /** 락온 중 시선이 몸통 방향보다 이만큼(rad) 더 아래를 보면 자유 조준으로 전환 */
 const LOCK_FREE_AIM = 0.17;
@@ -29,7 +30,11 @@ const lerpAngle = (a: number, b: number, t: number) => {
   return a + d * t;
 };
 const clampN = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
-const BEST_KEY = 'deepnest.best.spider';
+/** 층마다 나오는 보스. 새 보스는 여기에 한 줄 추가하면 된다 (인덱스 + 1 = 층 번호) */
+const BOSSES: Array<(host: Host, player: Player, drop: boolean) => Boss> = [(h, p, d) => new Spider(h, p, d), (h, p, d) => new Serpent(h, p, d)];
+const FLOORS = BOSSES.length;
+/** 1층 기록은 예전 키를 그대로 쓴다 */
+const bestKey = (floor: number) => (floor === 1 ? 'deepnest.best.spider' : `deepnest.best.f${floor}`);
 
 type GameState = 'title' | 'intro' | 'play' | 'victory' | 'over' | 'clear';
 
@@ -54,7 +59,8 @@ class Game implements Host {
   private input: Input;
   private arena: Arena;
   readonly player: Player;
-  boss: Spider | null = null;
+  boss: Boss | null = null;
+  floor = 1;
   private hud: Hud;
 
   state: GameState = 'title';
@@ -63,6 +69,7 @@ class Game implements Host {
   private time = 0;
   private fps = 60;
   private shakeAmt = 0;
+  private shakeHold = 0;
   private fovKick = 0;
   private hitStopT = 0;
   private rampLeft = 0;
@@ -108,7 +115,7 @@ class Game implements Host {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;
 
-    this.camera = new THREE.PerspectiveCamera(CFG.camera.fov, window.innerWidth / window.innerHeight, 0.15, 200);
+    this.camera = new THREE.PerspectiveCamera(CFG.camera.fov, window.innerWidth / window.innerHeight, 0.15, 520);
 
     // 후처리: MSAA 렌더타깃 + Bloom(발광 부위만 번짐) + 톤매핑 출력
     const rt = new THREE.WebGLRenderTarget(window.innerWidth * pr, window.innerHeight * pr, { type: THREE.HalfFloatType, samples: 4 });
@@ -122,7 +129,7 @@ class Game implements Host {
 
     this.input = new Input(canvas, this.binds);
     this.fx = new Fx(this.scene);
-    this.arena = new Arena(this.scene);
+    this.arena = new Arena(this.scene, this.renderer);
     this.player = new Player(this);
     this.hud = new Hud(this.camera);
     this.keyPanel = new KeyPanel(this.binds);
@@ -139,12 +146,13 @@ class Game implements Host {
       this.hadLock = locked;
     });
     canvas.addEventListener('pointerdown', () => {
-      if (!this.paused && this.state !== 'title' && !this.input.locked) this.lockPointer();
+      if (!this.paused && (this.state === 'play' || this.state === 'intro') && !this.input.locked) this.lockPointer();
     });
 
     this.player.onDeath = () => {
       if (this.state === 'victory' || this.state === 'clear') return;
       this.state = 'over';
+      this.showCursor(true);
       this.overShown = false;
       this.waitT = 1.3; // 쓰러지는 연출을 볼 시간
       this.sfx.drone(false);
@@ -170,8 +178,9 @@ class Game implements Host {
   }
 
   /* ───────────── Host 구현 ───────────── */
-  shake(amount: number) {
-    this.shakeAmt = Math.min(1.8, Math.max(this.shakeAmt, amount));
+  shake(amount: number, hold = 0) {
+    this.shakeAmt = Math.min(2.2, Math.max(this.shakeAmt, amount));
+    if (hold > 0) this.shakeHold = Math.max(this.shakeHold, hold);
   }
   punch(deg: number) {
     this.fovKick = Math.max(this.fovKick, deg);
@@ -193,6 +202,30 @@ class Game implements Host {
   banner(title: string, sub: string, seconds: number) {
     this.hud.banner(title, sub, seconds);
   }
+  flash(color: string, alpha: number, seconds: number) {
+    this.hud.flash(color, alpha, seconds);
+  }
+
+  /** 페이즈가 오르면 보스 몸에서 불꽃이 이글거린다: 2페이즈 = 붉은 불꽃, 3페이즈 = 검붉고 더 거센 불꽃 */
+  private flameT = 0;
+  private bossFlames(dt: number) {
+    const b = this.boss;
+    if (!b || !b.alive || b.phaseIndex < 1 || (this.state !== 'play' && this.state !== 'intro')) return;
+    const hot = b.phaseIndex >= 2;
+    this.flameT += dt * (hot ? 130 : 48);
+    const spheres = b.aimSpheres();
+    if (spheres.length === 0) return;
+    while (this.flameT >= 1) {
+      this.flameT -= 1;
+      const sp = spheres[Math.floor(Math.random() * spheres.length)];
+      const a = Math.random() * Math.PI * 2;
+      const rr = sp.r * (0.5 + Math.random() * 0.7);
+      this.flameP.set(sp.x + Math.cos(a) * rr, Math.max(0.2, sp.y + (Math.random() - 0.3) * sp.r), sp.z + Math.sin(a) * rr);
+      if (hot) this.fx.particles.burst(this.flameP, Math.random() < 0.5 ? 0x7a0614 : 0xb01020, 1, 1.6, 0.9, 0.3, 1.4, -4, 2.4);
+      else this.fx.particles.burst(this.flameP, Math.random() < 0.5 ? 0xff4a12 : 0xff8a22, 1, 1.2, 0.7, 0.2, 1.2, -3, 2.0);
+    }
+  }
+  private flameP = new THREE.Vector3();
 
   /* ───────────── 흐름 ───────────── */
   private onOverlayClick() {
@@ -201,12 +234,28 @@ class Game implements Host {
       this.setPaused(false);
     } else if (this.state === 'title') {
       this.startFight(true);
-    } else if ((this.state === 'over' && this.overShown) || this.state === 'clear') {
-      this.startFight(this.state === 'clear');
+    } else if (this.state === 'over' && this.overShown) {
+      this.startFight(false);
+    } else if (this.state === 'clear') {
+      this.startFight(true, this.floor < FLOORS ? this.floor + 1 : this.floor);
+    }
+  }
+
+  /** 쓰러졌거나 보스를 잡았을 땐 포인터 락을 풀고 마우스 커서를 다시 보여준다 */
+  private showCursor(on: boolean) {
+    const c = document.getElementById('c') as HTMLCanvasElement | null;
+    if (c) c.style.cursor = on ? 'default' : 'none';
+    if (on) {
+      try {
+        document.exitPointerLock();
+      } catch {
+        /* 무시 */
+      }
     }
   }
 
   private lockPointer() {
+    this.showCursor(false);
     try {
       const c = document.getElementById('c') as HTMLCanvasElement;
       const r = c.requestPointerLock() as unknown as Promise<void> | undefined;
@@ -230,8 +279,10 @@ class Game implements Host {
   }
 
   /** drop: 천장에서 떨어지는 등장(첫 도전/클리어 후) / false: 재도전 때는 짧은 기상 */
-  private startFight(drop: boolean) {
+  private startFight(drop: boolean, floor = this.floor) {
     this.sfx.unlock();
+    if (floor !== this.floor || !this.boss) this.arena.setTheme(floor);
+    this.floor = floor;
     this.fx.telegraphs.clear();
     this.boss?.dispose();
     this.boss = null;
@@ -239,7 +290,7 @@ class Game implements Host {
     this.player.respawn();
     this.player.hitsTaken = 0;
     this.dropIntro = drop;
-    this.boss = new Spider(this, this.player, drop);
+    this.boss = BOSSES[floor - 1](this, this.player, drop);
     this.boss.onDeath = () => this.onBossDeath();
     this.state = 'intro';
     this.fightTime = 0;
@@ -258,8 +309,9 @@ class Game implements Host {
 
   private onBossDeath() {
     this.state = 'victory';
+    this.showCursor(true);
     this.waitT = 3.4;
-    this.hud.banner('격파', CFG.spider.name, 3.0);
+    this.hud.banner('격파', this.boss?.title ?? '', 3.0);
     window.setTimeout(() => this.sfx.victory(), 1400);
   }
 
@@ -268,7 +320,7 @@ class Game implements Host {
     const left = this.boss ? Math.round((this.boss.hp / this.boss.maxHp) * 100) : 100;
     this.hud.showOverlay(
       '등불이 꺼졌다',
-      `${CFG.spider.name}의 남은 체력 <b>${left}%</b><br>
+      `${this.boss?.title ?? ''}의 남은 체력 <b>${left}%</b><br>
        <span style="color:#a8957c">같은 보스에게 처음부터 다시 도전합니다.</span><br>
        <div class="go">${this.binds.label('retry')} 키 또는 클릭으로 재도전</div>`,
     );
@@ -276,28 +328,31 @@ class Game implements Host {
 
   private showClear() {
     const t = this.fightTime;
+    const floor = this.floor;
+    const key = bestKey(floor);
     let best = NaN;
     try {
-      best = parseFloat(localStorage.getItem(BEST_KEY) ?? '');
+      best = parseFloat(localStorage.getItem(key) ?? '');
     } catch {
       /* 저장소를 못 쓰는 환경이면 기록 없이 진행 */
     }
     const isBest = !(best <= t);
     if (isBest) {
       try {
-        localStorage.setItem(BEST_KEY, String(t));
+        localStorage.setItem(key, String(t));
       } catch {
         /* ignore */
       }
     }
     this.state = 'clear';
+    const more = floor < FLOORS;
     this.hud.showOverlay(
-      '1층 클리어',
-      `<b>${CFG.spider.name}</b> 격파<br>
+      `${floor}층 클리어`,
+      `<b>${this.boss?.title ?? ''}</b> 격파<br>
        소요 시간 <b>${fmtTime(t)}</b>${isBest ? ' <span style="color:#ffd27a">· 최고 기록!</span>' : ` <span style="color:#a8957c">· 최고 ${fmtTime(best)}</span>`}<br>
        피격 <b>${this.player.hitsTaken}</b>회<br>
-       <span style="color:#a8957c">다음 층의 보스(뱀·용)는 준비 중입니다.</span><br>
-       <div class="go">${this.binds.label('retry')} 키 또는 클릭으로 다시 도전</div>`,
+       <span style="color:#a8957c">${more ? `다음은 ${floor + 1}층 — 더 깊은 곳의 보스가 기다립니다. 체력은 가득 채워집니다.` : '다음 층의 보스(용)는 준비 중입니다.'}</span><br>
+       <div class="go">${this.binds.label('retry')} 키 또는 클릭으로 ${more ? `${floor + 1}층으로` : '다시 도전'}</div>`,
     );
   }
 
@@ -383,12 +438,14 @@ class Game implements Host {
       this.player.update(dt, this.input, this.aim);
       this.player.arrows.update(dt);
       this.boss?.update(dt);
+      this.bossFlames(dt);
+      this.hud.setTint(this.boss && this.boss.alive ? (this.boss.screenTint ?? 0) : 0);
       this.updateFlow(raw, dt);
     } else if (this.paused) {
       this.player.cancelDraw(); // 일시정지 중에 놓은 버튼으로 불꽃이 나가지 않게
     }
     this.fx.update(dt);
-    this.arena.update(raw, this.time);
+    this.arena.update(raw, this.time, this.player.pos.x, this.player.pos.z);
     this.updateCamera(raw);
     this.updateCrosshair();
 
@@ -415,9 +472,9 @@ class Game implements Host {
       case 'intro': {
         this.introT += dt;
         // 보스가 착지하는 순간 등장 카드
-        if (boss && !this.bannerShown && boss.pos.y <= 0.05) {
+        if (boss && !this.bannerShown && boss.introBeat) {
           this.bannerShown = true;
-          this.hud.banner(CFG.spider.name, '1층 · 거미굴', 3.0);
+          this.hud.banner(boss.title, boss.floorLabel, 3.0);
         }
         if (boss?.ready) this.state = 'play';
         break;
@@ -451,6 +508,7 @@ class Game implements Host {
     if (i.hit('Digit2') && !this.player.dead) this.player.setHp(this.player.hp - 1);
     if (i.hit('Digit3') && !this.player.dead) this.player.setHp(this.player.hp + 1);
     if (i.hit('Digit4')) this.player.addCharge(CFG.special.max / CFG.special.chargePerDamage);
+    if (i.hit('Digit0')) this.startFight(false, (this.floor % FLOORS) + 1);
     if (!boss) return;
     if (i.hit('Digit5')) {
       boss.attacksOn = !boss.attacksOn;
@@ -458,7 +516,7 @@ class Game implements Host {
     }
     if (i.hit('Digit6')) this.startFight(false);
     if (i.hit('Digit7') && boss.alive) {
-      const next = (CFG.spider.phaseAt as readonly number[])[boss.phaseIndex];
+      const next = boss.phaseMarks[boss.phaseIndex];
       if (next === undefined) {
         this.hud.toast('마지막 페이즈입니다');
       } else {
@@ -468,7 +526,8 @@ class Game implements Host {
     }
     if (i.hit('Digit8') && boss.alive) boss.setHpFrac(0.05);
     if (i.hit('Digit9') && boss.alive && boss.ready) {
-      const name = SEQUENCE_ATTACKS[this.debugAtk++ % SEQUENCE_ATTACKS.length];
+      const names = boss.attackNames;
+      const name = names[this.debugAtk++ % names.length];
       boss.forceAttack(name);
       this.hud.toast(`다음 공격: ${name}`);
     }
@@ -539,27 +598,28 @@ class Game implements Host {
    * 시선이 처음 닿는 것 — 보스 몸(몸통/배 구) → 바닥 — 이고, 아무것도 없으면 먼 점.
    * 보정(자동 조준)은 없다. 락온 중에만 보스 몸통을 향한다.
    */
-  private updateAim3(fx: number, fz: number, px: number, pz: number, b: Spider | null) {
+  private updateAim3(fx: number, fz: number, px: number, pz: number, b: Boss | null) {
     const cp = Math.cos(this.camPitch);
     const O = this.rayO.set(px, this.pivotY(), pz);
     const D = this.rayD.set(fx * cp, -Math.sin(this.camPitch), fz * cp);
     // 락온 중에는 보스 몸통을 향하지만, 시선을 몸통 방향보다 확연히 아래로 내리면(새끼 거미·알을 쏠 때)
     // 그쪽을 자유롭게 조준한다. 그렇지 않으면 락온 중에는 아래를 볼 수 없다.
     let lockedOnBoss = false;
+    const lp = this.tmpV;
     if (b && this.lockOn) {
-      const th = b.rig.thorax;
-      const hd = Math.hypot(th.x - O.x, th.z - O.z) || 1;
-      const pitchToBoss = Math.atan2(O.y - th.y, hd); // + = 몸통이 아래에 있음
+      b.lockPoint(lp);
+      const hd = Math.hypot(lp.x - O.x, lp.z - O.z) || 1;
+      const pitchToBoss = Math.atan2(O.y - lp.y, hd); // + = 몸통이 아래에 있음
       lockedOnBoss = this.camPitch - pitchToBoss < LOCK_FREE_AIM;
     }
     if (b && lockedOnBoss) {
-      const th = b.rig.thorax;
-      this.aim3.set(th.x, th.y, th.z);
+      b.lockPoint(lp);
+      this.aim3.set(lp.x, lp.y, lp.z);
     } else {
       let s = 60;
       if (D.y < -1e-3) s = Math.min(s, (O.y - 0.05) / -D.y); // 바닥
       if (b) {
-        for (const c of [b.rig.thorax, b.rig.abdomenC]) {
+        for (const c of b.aimSpheres()) {
           // 시선과 구의 첫 교점
           const wx = c.x - O.x;
           const wy = c.y - O.y;
@@ -598,7 +658,7 @@ class Game implements Host {
     const oz = -dz;
     const a = ox * ox + oz * oz;
     const bq = px * ox + pz * oz;
-    const c = px * px + pz * pz - C.wallLimit * C.wallLimit;
+    const c = px * px + pz * pz - WORLD.wallLimit * WORLD.wallLimit;
     if (a > 1e-6 && c < 0) {
       const t = (-bq + Math.sqrt(Math.max(0, bq * bq - a * c))) / a;
       want = Math.min(want, Math.max(C.minDist, t));
@@ -607,7 +667,8 @@ class Game implements Host {
     const k = want < this.camDist ? 1 - Math.exp(-18 * raw) : 1 - Math.exp(-4 * raw);
     this.camDist += (want - this.camDist) * k;
 
-    this.shakeAmt *= Math.exp(-9 * raw);
+    if (this.shakeHold > 0) this.shakeHold -= raw;
+    else this.shakeAmt *= Math.exp(-(this.shakeAmt > 0.8 ? 6 : 9) * raw);
     const sx = (Math.random() - 0.5) * 2 * this.shakeAmt * 0.12;
     const sy = (Math.random() - 0.5) * 2 * this.shakeAmt * 0.12;
     const cx = px - dx * this.camDist + sx;
@@ -636,7 +697,9 @@ class Game implements Host {
     this.crossEl.style.setProperty('--p', ch.toFixed(3));
     this.lockEl.classList.toggle('hidden', !locking);
     if (locking && b) {
-      const v = this.tmpV.set(b.pos.x, 2.6, b.pos.z).project(this.camera);
+      const v = b.lockPoint(this.tmpV);
+      v.y += 1.3;
+      v.project(this.camera);
       if (v.z < 1) {
         this.lockEl.style.left = `${(v.x * 0.5 + 0.5) * window.innerWidth}px`;
         this.lockEl.style.top = `${(-v.y * 0.5 + 0.5) * window.innerHeight}px`;

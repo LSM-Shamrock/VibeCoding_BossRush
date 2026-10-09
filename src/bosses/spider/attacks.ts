@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { CFG } from '../../config';
 import type { Spider } from './spider';
+import type { AttackScript, Step } from '../../types';
+import { WORLD } from '../../world';
+export type { AttackScript, Step };
 
 const V3 = THREE.Vector3;
 const S = CFG.spider;
@@ -8,23 +11,9 @@ const S = CFG.spider;
 export type AttackName = 'web' | 'pounce' | 'triple' | 'barrage' | 'eggs' | 'webtrap' | 'stagger' | 'roar';
 export const SEQUENCE_ATTACKS: AttackName[] = ['web', 'pounce', 'barrage', 'eggs', 'triple', 'webtrap'];
 
-export interface Step {
-  at: number;
-  fn: () => void;
-}
-
-/**
- * 공격 = "시간표". 예비동작(Telegraph) → 공격 → 후딜(약점 노출) 이 한 눈에 보이도록
- * 각 단계를 at(초) + 함수로 늘어놓는다. 보스 본체는 이 시간표를 실행만 한다.
- */
-export interface AttackScript {
-  steps: Step[];
-  end: number;
-}
-
 const yawOf = (dx: number, dz: number) => Math.atan2(dx, dz);
 const arenaClamp = (v: THREE.Vector3, margin: number) => {
-  const lim = CFG.arena.radius - margin;
+  const lim = WORLD.radius - margin;
   const d = Math.hypot(v.x, v.z);
   if (d > lim) v.multiplyScalar(lim / d);
   return v;
@@ -176,7 +165,7 @@ function land(s: Spider, to: THREE.Vector3, radius: number, last: boolean) {
     host.fx.particles.burst(new V3(to.x + Math.cos(a) * d, 0.2, to.z + Math.sin(a) * d), 0xb8a58a, 3, 5, 0.6, 0.18, 0.7);
   }
   host.fx.burstLight(new V3(to.x, 1.5, to.z), 0xffa060, 90, 0.4);
-  host.shake(last ? 1.0 : 0.7);
+  host.shake(last ? 2.0 : 1.5, 0.12);
   host.hitStop(0.05);
   host.sfx.land();
   if (!player.dead && Math.hypot(player.pos.x - to.x, player.pos.z - to.z) < radius + player.hitRadius) player.takeDamage(to.x, to.z);
@@ -385,6 +374,7 @@ function roar(s: Spider): AttackScript {
           s.faceRate = 3;
           s.setPose('rear', 5);
           s.host.sfx.roar();
+          s.host.flash(s.phaseIndex >= 1 ? '#5a0008' : '#ff3a1a', 0.5, 1.0);
           s.host.slowmo(0.45, 0.7);
         },
       },

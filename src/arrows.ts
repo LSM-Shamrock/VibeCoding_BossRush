@@ -3,6 +3,7 @@ import { CFG } from './config';
 import { PAL } from './palette';
 import { Blasts } from './blast';
 import type { Host, Target } from './types';
+import { WORLD } from './world';
 
 const V3 = THREE.Vector3;
 
@@ -84,7 +85,7 @@ export class Arrows {
   }
 
   update(dt: number) {
-    const lim = CFG.arena.radius + 1;
+    const lim = WORLD.radius + 10; // 맵 바깥(이무기 외곽 구역)까지 날아간다
     let lead: Fireball | null = null;
     for (const a of this.pool) {
       if (!a.active) continue;

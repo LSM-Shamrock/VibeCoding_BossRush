@@ -33,6 +33,9 @@ export class Hud {
   private bossChip = $('bosschip');
   private bossMarks = $('bossmarks');
   private bossTag = $('bosstag');
+  private barShown = 1;
+  private barT = 0;
+  private barBoss: BossInfo | null = null;
   private status = $('status');
   private fpsEl = $('fps');
   private dmgLayer = $('dmglayer');
@@ -45,6 +48,8 @@ export class Hud {
   private bannerS = $('bs');
   private kDash = $('kdash');
   private kSpecial = $('kspecial');
+  private tintEl: HTMLDivElement;
+  private flashEl: HTMLDivElement;
   private toastTimer = 0;
   private bannerTimer = 0;
   private v = new THREE.Vector3();
@@ -52,6 +57,15 @@ export class Hud {
   private marksKey = '';
 
   constructor(private camera: THREE.Camera) {
+    const mk = (z: number) => {
+      const d = document.createElement('div');
+      d.style.cssText = `position:fixed;inset:0;pointer-events:none;z-index:${z};opacity:0;`;
+      document.body.appendChild(d);
+      return d;
+    };
+    this.tintEl = mk(3);
+    this.tintEl.style.background = 'radial-gradient(ellipse at center, rgba(90,30,200,0.18) 30%, rgba(60,10,160,0.62) 100%)';
+    this.flashEl = mk(4);
     const wrap = $('lamps');
     for (let i = 0; i < CFG.player.maxHp; i++) {
       const d = document.createElement('span');
@@ -96,18 +110,24 @@ export class Hud {
     const b = s.boss;
     this.boss.classList.toggle('hidden', !b);
     if (b) {
-      const frac = Math.min(s.bossReveal, Math.max(0, b.hp / b.maxHp));
+      // 체력바는 '지금 페이즈 몫'만 보여준다: 한 줄을 다 깎으면 비었다가, 다음 페이즈로 넘어가며 새 체력으로 다시 찬다
+      const marks = b.phaseMarks;
+      const pi = Math.min(b.phaseIndex, marks.length);
+      const hi = pi === 0 ? 1 : marks[pi - 1];
+      const lo = pi < marks.length ? marks[pi] : 0;
+      const target = Math.min(1, Math.max(0, (b.hp / b.maxHp - lo) / (hi - lo)));
+      const now = performance.now();
+      const dt = Math.min(0.1, (now - this.barT) / 1000);
+      this.barT = now;
+      if (this.barBoss !== b || s.bossReveal < 1 || target <= this.barShown) this.barShown = target;
+      else this.barShown = Math.min(target, this.barShown + dt * 0.55); // 새 체력바가 차오르는 속도
+      this.barBoss = b;
+      const frac = Math.min(s.bossReveal, this.barShown);
       this.bossName.textContent = b.name;
       this.bossFill.style.width = `${(frac * 100).toFixed(1)}%`;
       this.bossChip.style.width = `${(frac * 100).toFixed(1)}%`;
       this.bossTag.classList.toggle('on', b.exposed && b.alive);
       this.bossFill.classList.toggle('exposed', b.exposed && b.alive);
-      // 페이즈 눈금
-      const key = b.phaseMarks.join(',');
-      if (key !== this.marksKey) {
-        this.marksKey = key;
-        this.bossMarks.innerHTML = b.phaseMarks.map((m) => `<i style="left:${m * 100}%"></i>`).join('');
-      }
     }
 
     const st =
@@ -119,6 +139,22 @@ export class Hud {
       this.lastStatus = st;
     }
     this.fpsEl.textContent = `${Math.round(s.fps)} fps`;
+  }
+
+  /** 몸통 접촉 등으로 화면이 물드는 정도 (0 = 없음) */
+  setTint(v: number) {
+    this.tintEl.style.opacity = String(Math.max(0, Math.min(1, v)));
+  }
+
+  /** 화면 전체 번쩍임 */
+  flash(color: string, alpha: number, seconds: number) {
+    const f = this.flashEl;
+    f.style.transition = 'none';
+    f.style.background = color;
+    f.style.opacity = String(alpha);
+    void f.offsetWidth;
+    f.style.transition = `opacity ${seconds}s ease-out`;
+    f.style.opacity = '0';
   }
 
   toast(msg: string, sec = 1.6) {

@@ -41,7 +41,7 @@ export class KeyPanel {
       <summary>개발용 디버그 키 (바꿀 수 없음)</summary>
       <div><b>1</b> 무적 · <b>2</b> 체력 -1 · <b>3</b> 체력 +1 · <b>4</b> 특수 게이지 충전</div>
       <div><b>5</b> 보스 공격 켜기/끄기 · <b>6</b> 보스 재시작 · <b>7</b> 다음 페이즈로 · <b>8</b> 보스 체력 5%</div>
-      <div><b>9</b> 다음 공격 강제 (거미줄→점프→탄막→알→연속점프→거미줄 장판) · <b>\`</b> 디버그 표시</div>`;
+      <div><b>9</b> 다음 공격 강제 (보스별 공격을 차례로) · <b>0</b> 다음 층 보스로 이동 · <b>\`</b> 디버그 표시</div>`;
 
     body.append(this.grid, fixed, dbg);
     this.el.append(top, body);

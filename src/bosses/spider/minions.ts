@@ -3,6 +3,7 @@ import { CFG } from '../../config';
 import type { Circle, Host, Target } from '../../types';
 import type { Player } from '../../player';
 import { PAL } from '../../palette';
+import { WORLD } from '../../world';
 
 const V3 = THREE.Vector3;
 const S = CFG.spider;
@@ -145,7 +146,7 @@ export class Egg implements Minion {
     if (Math.hypot(p.x - this.pos.x, p.z - this.pos.z) > 0.8 + r || p.y > 2.4) return 0;
     this.hp -= dmg;
     this.onHit(dmg);
-    this.host.sfx.hit(false);
+    this.host.sfx.hit(dmg);
     if (this.hp <= 0) this.kill();
     return dmg;
   }
@@ -155,7 +156,7 @@ export class Egg implements Minion {
     if (Math.hypot(x - this.pos.x, z - this.pos.z) > 0.8 + r) return 0;
     this.hp -= dmg;
     this.onHit(dmg);
-    this.host.sfx.hit(false);
+    this.host.sfx.hit(dmg);
     if (this.hp <= 0) this.kill();
     return dmg;
   }
@@ -310,9 +311,9 @@ export class Baby implements Minion {
     this.pos.x += this.vel.x * dt;
     this.pos.z += this.vel.z * dt;
     const r = Math.hypot(this.pos.x, this.pos.z);
-    if (r > CFG.arena.playerLimit) {
-      this.pos.x *= CFG.arena.playerLimit / r;
-      this.pos.z *= CFG.arena.playerLimit / r;
+    if (r > WORLD.playerLimit) {
+      this.pos.x *= WORLD.playerLimit / r;
+      this.pos.z *= WORLD.playerLimit / r;
     }
 
     const targetYaw = Math.atan2(this.vel.x, this.vel.z);
@@ -341,7 +342,7 @@ export class Baby implements Minion {
     if (Math.hypot(p.x - this.pos.x, p.z - this.pos.z) > S.baby.radius + r || p.y > 2.4) return 0;
     this.hp -= dmg;
     this.flash = 1;
-    this.host.sfx.hit(false);
+    this.host.sfx.hit(dmg);
     if (this.hp <= 0) this.die(true);
     return dmg;
   }

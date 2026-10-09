@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { CFG } from './config';
 import { PAL } from './palette';
+import { Pond, POND } from './pond';
+import { setWorldFloor } from './world';
 
 const TAU = Math.PI * 2;
 
@@ -394,16 +396,29 @@ export class Arena {
   private glyphMats: THREE.MeshBasicMaterial[] = [];
   private floorGlow: THREE.MeshBasicMaterial;
   private drifts: Drift[] = [];
+  private scene: THREE.Scene;
+  private hemi: THREE.HemisphereLight;
+  private sun: THREE.DirectionalLight;
+  /** 1층(거미굴) 소품 전부. 2층에서는 통째로 숨긴다 */
+  private f1 = new THREE.Group();
+  /** 2층(이무기의 못). 처음 들어갈 때 만든다 */
+  private pond: Pond | null = null;
+  private theme = 1;
 
-  constructor(scene: THREE.Scene) {
+  constructor(scene: THREE.Scene, private renderer: THREE.WebGLRenderer | null = null) {
+    this.scene = scene;
+    const root = this.f1;
+    scene.add(root);
     const R = CFG.arena.radius;
     const rand = mulberry32(20241);
     scene.background = new THREE.Color(PAL.fog);
     scene.fog = new THREE.FogExp2(PAL.fog, 0.012);
 
     /* 조명: 따뜻한 최소 환경광 + 천장 틈으로 새어 드는 빛(그림자). 등불이 약해져도 바닥 윤곽은 읽히게. */
-    scene.add(new THREE.HemisphereLight(0xc08a62, 0x24120a, 0.78));
+    this.hemi = new THREE.HemisphereLight(0xc08a62, 0x24120a, 0.78);
+    scene.add(this.hemi);
     const sun = new THREE.DirectionalLight(0xffc690, 1.1);
+    this.sun = sun;
     sun.position.set(-9, 20, 7);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
@@ -417,32 +432,32 @@ export class Arena {
     sun.shadow.bias = -0.0004;
     sun.shadow.normalBias = 0.04;
     scene.add(sun);
+    scene.add(sun.target);
 
     /* 바닥: 어긋나게 깔린 석판 + 균열 + 중앙의 태양 문양 */
     const tex = makeFloor(rand);
-    const floor = new THREE.Mesh(
-      new THREE.CircleGeometry(R, 96).rotateX(-Math.PI / 2),
-      new THREE.MeshStandardMaterial({ map: tex.map, bumpMap: tex.bump, bumpScale: 2.2, roughness: 0.92, metalness: 0 }),
-    );
+    const floorMat = new THREE.MeshStandardMaterial({ map: tex.map, bumpMap: tex.bump, bumpScale: 2.2, roughness: 0.92, metalness: 0 });
+    const floor = new THREE.Mesh(new THREE.CircleGeometry(R, 96).rotateX(-Math.PI / 2), floorMat);
     floor.receiveShadow = true;
-    scene.add(floor);
+    root.add(floor);
 
     // 문양이 달아오르는 층 (가산 합성)
     this.floorGlow = new THREE.MeshBasicMaterial({ map: tex.glow, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
     const glow = new THREE.Mesh(new THREE.CircleGeometry(R, 96).rotateX(-Math.PI / 2), this.floorGlow);
     glow.position.y = 0.012;
-    scene.add(glow);
+    root.add(glow);
 
     /* 바깥 땅 */
     const gtex = makeGroundTex(rand);
     gtex.repeat.set(16, 16);
-    const ground = new THREE.Mesh(new THREE.RingGeometry(R, 70, 96).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: gtex, roughness: 1, color: 0x6e5a48 }));
+    const groundMat = new THREE.MeshStandardMaterial({ map: gtex, roughness: 1, color: 0x6e5a48 });
+    const ground = new THREE.Mesh(new THREE.RingGeometry(R, 70, 96).rotateX(-Math.PI / 2), groundMat);
     ground.position.y = -0.02;
     ground.receiveShadow = true;
-    scene.add(ground);
+    root.add(ground);
     const outer = new THREE.Mesh(new THREE.CircleGeometry(160, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: PAL.void }));
     outer.position.y = -0.3;
-    scene.add(outer);
+    root.add(outer);
 
     /* 돌 재질 */
     const stoneTex = makeStoneTex(rand);
@@ -470,7 +485,7 @@ export class Arena {
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.frustumCulled = false;
-      scene.add(mesh);
+      root.add(mesh);
       return mesh;
     };
     const stoneTint = (c: THREE.Color, lo = 0.8, hi = 1.15) => {
@@ -553,7 +568,7 @@ export class Arena {
       grp.position.set(Math.cos(a) * PR, 0, Math.sin(a) * PR);
       grp.rotation.y = -a;
       grp.scale.setScalar(1.3); // 멀어진 만큼 크게, 먼 배경으로서의 존재감 유지
-      scene.add(grp);
+      root.add(grp);
       const kind = kinds[i];
       const shaftH = kind === 'tall' ? 4.5 : kind === 'broken' ? 1.7 + rand() * 1.6 : 0.5 + rand() * 0.5;
       mkMesh(grp, slabGeo, stoneDark, 0, 0.25, 0);
@@ -623,7 +638,7 @@ export class Arena {
       const bz = Math.sin(a) * (R + 0.75);
       const grp = new THREE.Group();
       grp.position.set(bx, 0.4, bz);
-      scene.add(grp);
+      root.add(grp);
       mkMesh(grp, standGeo, stoneDark, 0, 0.67, 0);
       mkMesh(grp, bowlGeo, stone, 0, 1.55, 0);
       const coal = new THREE.Mesh(new THREE.CircleGeometry(0.62, 12).rotateX(-Math.PI / 2), coalMat);
@@ -642,13 +657,13 @@ export class Arena {
       if (LIT.has(k)) {
         light = new THREE.PointLight(0xff9a48, 28, 26, 1.4);
         light.position.set(bx - Math.cos(a) * 1.0, 3.2, bz - Math.sin(a) * 1.0);
-        scene.add(light);
+        root.add(light);
       }
       // 바닥에 번지는 불빛 (조명이 없는 화로도 주변이 밝아 보이도록)
       const poolMat = new THREE.MeshBasicMaterial({ map: poolTex, color: 0xff8a3a, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
       const pool = new THREE.Mesh(new THREE.PlaneGeometry(15, 15).rotateX(-Math.PI / 2), poolMat);
       pool.position.set(bx - Math.cos(a) * 3.2, 0.02, bz - Math.sin(a) * 3.2);
-      scene.add(pool);
+      root.add(pool);
       this.braziers.push({ flames, light, pool, ph: rand() * 20, base: light ? light.intensity : 0 });
     }
 
@@ -668,14 +683,64 @@ export class Arena {
       geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
       const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color, size, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
       pts.frustumCulled = false;
-      scene.add(pts);
+      root.add(pts);
       this.drifts.push({ pts, speed, top, sway });
     };
     drift(220, 0xe9c898, 0.075, 0.38, 9, [0.1, 0.25], 0.08, R + 3);
     drift(130, 0xff8a30, 0.13, 0.85, 11, [0.5, 1.4], 0.35, R + 2);
   }
 
-  update(dt: number, t: number) {
+  /**
+   * 층마다 무대를 통째로 바꾼다.
+   *  1층(거미굴): 붉은 모래빛 유적 — 화로 불빛, 따뜻한 먼지.
+   *  2층(이무기의 못): 군청빛 한밤의 못 위에 뜬 둥근 석단 — 청백색 석등, 도깨비불, 달문 (pond.ts)
+   */
+  setTheme(floor: number) {
+    const f2 = floor >= 2;
+    setWorldFloor(floor);
+    const sc = this.sun.shadow.camera;
+    const ext = f2 ? 40 : 24;
+    sc.left = -ext;
+    sc.right = ext;
+    sc.top = ext;
+    sc.bottom = -ext;
+    sc.far = f2 ? 90 : 60;
+    sc.updateProjectionMatrix();
+    if (f2 && !this.pond) this.pond = new Pond(this.scene, this.renderer);
+    this.theme = f2 ? 2 : 1;
+    this.f1.visible = !f2;
+    if (this.pond) this.pond.group.visible = f2;
+    const fog = f2 ? POND.fog : PAL.fog;
+    (this.scene.background as THREE.Color).setHex(fog);
+    const fg = this.scene.fog as THREE.FogExp2;
+    fg.color.setHex(fog);
+    fg.density = f2 ? POND.fogDensity : 0.012;
+    this.hemi.color.setHex(f2 ? POND.hemiSky : 0xc08a62);
+    this.hemi.groundColor.setHex(f2 ? POND.hemiGround : 0x24120a);
+    this.hemi.intensity = f2 ? POND.hemiIntensity : 0.78;
+    this.sun.color.setHex(f2 ? POND.moon : 0xffc690);
+    this.sun.intensity = f2 ? POND.moonIntensity : 1.1;
+    if (f2) this.sun.position.set(...POND.moonPos);
+    else this.sun.position.set(-9, 20, 7);
+    this.sun.target.position.set(0, 0, 0);
+    this.sun.target.updateMatrixWorld();
+  }
+
+  /**
+   * focus: 지금 보고 있는 중심(플레이어). 2층은 석단이 넓어서 그림자 범위와 석등 빛이 플레이어를 따라다닌다.
+   */
+  update(dt: number, t: number, fx = 0, fz = 0) {
+    if (this.theme === 2) {
+      // 그림자 텍스처가 일렁이지 않도록 한 칸(≈0.04) 단위로 끊어서 따라간다
+      const q = 0.8;
+      const sx = Math.round(fx / q) * q;
+      const sz = Math.round(fz / q) * q;
+      this.sun.position.set(sx + POND.moonPos[0], POND.moonPos[1], sz + POND.moonPos[2]);
+      this.sun.target.position.set(sx, 0, sz);
+      this.sun.target.updateMatrixWorld();
+      this.pond?.update(dt, t, fx, fz);
+      return;
+    }
     for (const d of this.drifts) {
       const a = d.pts.geometry.getAttribute('position') as THREE.BufferAttribute;
       for (let i = 0; i < a.count; i++) {

@@ -3,6 +3,7 @@ import { CFG } from '../../config';
 import { Gait } from '../../procedural/gait';
 import { PoseBlend } from '../../procedural/pose';
 import { solveTwoBone, placeSegment, distPointSegment } from '../../procedural/legIK';
+import { WORLD } from '../../world';
 
 const V3 = THREE.Vector3;
 const S = CFG.spider;
@@ -525,11 +526,11 @@ export class SpiderRig {
         if (Math.abs(d.vel.y) < 1.2 && Math.hypot(d.vel.x, d.vel.z) < 0.6) d.rest = true;
       }
       const r = Math.hypot(d.mesh.position.x, d.mesh.position.z);
-      if (r > CFG.arena.radius - 0.5) {
+      if (r > WORLD.radius - 0.5) {
         d.vel.x *= -0.4;
         d.vel.z *= -0.4;
-        d.mesh.position.x *= (CFG.arena.radius - 0.6) / r;
-        d.mesh.position.z *= (CFG.arena.radius - 0.6) / r;
+        d.mesh.position.x *= (WORLD.radius - 0.6) / r;
+        d.mesh.position.z *= (WORLD.radius - 0.6) / r;
       }
     }
   }

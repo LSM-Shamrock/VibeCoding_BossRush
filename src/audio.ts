@@ -71,12 +71,16 @@ export class Sfx {
     this.tone(900, 380, 0.07, 'square', 0.05);
     this.noise(0.05, 0.03, 4000, 1500, 'highpass');
   }
-  hit(weak: boolean) {
-    if (weak) {
-      this.tone(1200, 1800, 0.09, 'triangle', 0.12);
-      this.tone(600, 300, 0.06, 'square', 0.05);
-    } else {
-      this.tone(220, 120, 0.06, 'square', 0.07);
+  /** 피격음: 들어간 데미지(amount)가 클수록 낮고 묵직하고 크게, 작을수록 가볍고 짧게. 14 ≈ 완전 차징 기본 공격 */
+  hit(amount: number) {
+    const t = Math.min(1, Math.sqrt(Math.max(0, amount) / 20)); // 0..1 (0.8→0.2, 5→0.5, 14→0.84)
+    // 가벼운 '틱' → 큰 데미지일수록 음정이 높고 길게 울리는 '팅'
+    this.tone(700 + 700 * t, 900 + 1500 * t, 0.04 + 0.08 * t, 'triangle', 0.04 + 0.1 * t);
+    if (t > 0.3) this.tone(520 - 240 * t, 200 - 80 * t, 0.06 + 0.1 * t, 'square', 0.03 + 0.06 * t);
+    // 묵직한 타격감: 저음 쿵 + 잡음
+    if (t > 0.5) {
+      this.tone(150 - 60 * t, 48, 0.12 + 0.16 * t, 'sine', 0.1 + 0.16 * (t - 0.5));
+      this.noise(0.05 + 0.08 * t, 0.04 + 0.08 * (t - 0.5), 2500, 500, 'lowpass');
     }
   }
   dash() {
@@ -277,10 +281,16 @@ export class Sfx {
   }
   /** 페이즈 전환 포효 */
   roar() {
-    this.tone(95, 55, 1.4, 'sawtooth', 0.2);
-    this.tone(142, 80, 1.2, 'square', 0.08, 0.08);
-    this.noise(1.2, 0.2, 1200, 120, 'bandpass');
-    this.tone(60, 40, 1.8, 'sine', 0.4);
+    // 깊은 울부짖음: 내려앉는 톱니파 여러 겹 + 떨리는 중음 + 거친 숨소리 + 바닥을 울리는 저음
+    this.tone(210, 70, 2.2, 'sawtooth', 0.2);
+    this.tone(160, 52, 2.4, 'sawtooth', 0.24, 0.05);
+    this.tone(118, 44, 2.6, 'sawtooth', 0.22, 0.1);
+    this.tone(320, 120, 1.4, 'square', 0.07, 0.15);
+    this.tone(48, 30, 2.8, 'sine', 0.55);
+    this.noise(2.0, 0.26, 1800, 160, 'bandpass');
+    this.noise(1.2, 0.2, 5200, 900, 'highpass', 0.3);
+    this.noise(0.5, 0.45, 900, 40, 'lowpass', 0.55);
+    this.tone(70, 28, 0.9, 'sine', 0.6, 0.6);
   }
   /** 알 / 새끼가 터지는 소리 */
   pop() {
@@ -301,6 +311,155 @@ export class Sfx {
   bossIntro() {
     this.tone(70, 34, 1.0, 'sawtooth', 0.14);
     this.noise(0.8, 0.14, 800, 80, 'lowpass');
+  }
+
+  /* ───────────── 뱀 소리 ───────────── */
+  /**
+   * 뱀의 쉬익 소리: 높은 대역의 거친 잡음 + 빠른 떨림(쉭쉭 갈라지는 느낌) + 낮은 숨소리.
+   * len 초 동안, vol 0~1. 대역이 올라갔다 내려가며 "스스ㅅㅅ슈" 하고 흐른다.
+   */
+  hiss(len = 0.8, vol = 1) {
+    if (!this.ctx || !this.master || !this.noiseBuf) return;
+    const c = this.ctx;
+    const t = c.currentTime;
+    const mk = () => {
+      const s = c.createBufferSource();
+      s.buffer = this.noiseBuf;
+      s.loop = true;
+      return s;
+    };
+    // 높은 쉭 소리
+    const src = mk();
+    const hp = c.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 1900;
+    const bp = c.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 0.55;
+    bp.frequency.setValueAtTime(3400, t);
+    bp.frequency.exponentialRampToValueAtTime(6400, t + len * 0.45);
+    bp.frequency.exponentialRampToValueAtTime(4600, t + len);
+    const env = c.createGain();
+    const peak = 0.19 * vol;
+    const att = Math.min(0.1, len * 0.22);
+    env.gain.setValueAtTime(0.0001, t);
+    env.gain.exponentialRampToValueAtTime(peak, t + att);
+    env.gain.setValueAtTime(peak, t + len * 0.55);
+    env.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    // 거친 떨림 (진폭 변조)
+    const am = c.createGain();
+    am.gain.value = 0.72;
+    const lfo = c.createOscillator();
+    lfo.frequency.value = 20 + Math.random() * 10;
+    const lg = c.createGain();
+    lg.gain.value = 0.26;
+    lfo.connect(lg).connect(am.gain);
+    src.connect(hp).connect(bp).connect(am).connect(env).connect(this.master);
+    src.start(t, Math.random() * 0.5);
+    src.stop(t + len + 0.05);
+    lfo.start(t);
+    lfo.stop(t + len + 0.05);
+    // 낮은 숨소리 (몸통이 큰 뱀의 바람)
+    const src2 = mk();
+    const bp2 = c.createBiquadFilter();
+    bp2.type = 'bandpass';
+    bp2.Q.value = 1.1;
+    bp2.frequency.setValueAtTime(1100, t);
+    bp2.frequency.exponentialRampToValueAtTime(1900, t + len * 0.5);
+    bp2.frequency.exponentialRampToValueAtTime(900, t + len);
+    const env2 = c.createGain();
+    env2.gain.setValueAtTime(0.0001, t);
+    env2.gain.exponentialRampToValueAtTime(0.05 * vol, t + att * 1.4);
+    env2.gain.setValueAtTime(0.05 * vol, t + len * 0.5);
+    env2.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    src2.connect(bp2).connect(env2).connect(this.master);
+    src2.start(t, Math.random() * 0.5);
+    src2.stop(t + len + 0.05);
+  }
+  /** 혀 낼름: 아주 짧고 높은 '츠츠' */
+  flick(vol = 1) {
+    this.noise(0.05, 0.13 * vol, 8200, 5200, 'bandpass');
+    this.noise(0.04, 0.1 * vol, 9000, 6000, 'bandpass', 0.075);
+  }
+  /** 물어뜯으려 덮치는 소리: 휙 + 쉭 + 묵직한 마찰 */
+  strike() {
+    this.noise(0.34, 0.2, 6500, 1700, 'bandpass');
+    this.noise(0.24, 0.12, 900, 180, 'lowpass');
+    this.tone(210, 70, 0.18, 'sawtooth', 0.06);
+    this.hiss(0.36, 0.8);
+  }
+
+  private slitherNodes: {
+    src: AudioBufferSourceNode;
+    lfo: OscillatorNode;
+    lg: GainNode;
+    amp: GainNode;
+    bp: BiquadFilterNode;
+  } | null = null;
+  private slitherLevel = 0;
+  private slitherAt = 0;
+  private slitherQuiet = 0;
+
+  /**
+   * 몸이 바닥을 쓸며 기어가는 소리 (계속 호출). level 0~1+ = 속도. 빠를수록 크고 촘촘하고 밝다.
+   * 사각사각 비늘 쓸리는 소리 = 대역 잡음 + 느린 진폭 떨림.
+   */
+  slither(level: number) {
+    if (!this.ctx || !this.master || !this.noiseBuf) return;
+    const c = this.ctx;
+    const now = c.currentTime;
+    if (level < 0.02) {
+      this.slitherQuiet += 1;
+      if (this.slitherNodes && this.slitherQuiet > 120) {
+        const n = this.slitherNodes;
+        n.amp.gain.setTargetAtTime(0.0001, now, 0.1);
+        const stop = () => {
+          try {
+            n.src.stop();
+            n.lfo.stop();
+          } catch {
+            /* 이미 멈춤 */
+          }
+        };
+        window.setTimeout(stop, 500);
+        this.slitherNodes = null;
+      }
+      return;
+    }
+    this.slitherQuiet = 0;
+    if (!this.slitherNodes) {
+      const src = c.createBufferSource();
+      src.buffer = this.noiseBuf;
+      src.loop = true;
+      const bp = c.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.Q.value = 0.9;
+      bp.frequency.value = 1300;
+      const lp = c.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 3800;
+      const amp = c.createGain();
+      amp.gain.value = 0.0001;
+      const lfo = c.createOscillator();
+      lfo.frequency.value = 5;
+      const lg = c.createGain();
+      lg.gain.value = 0;
+      lfo.connect(lg).connect(amp.gain);
+      src.connect(bp).connect(lp).connect(amp).connect(this.master);
+      src.start();
+      lfo.start();
+      this.slitherNodes = { src, lfo, lg, amp, bp };
+    }
+    if (now - this.slitherAt < 0.08 && Math.abs(level - this.slitherLevel) < 0.05) return;
+    this.slitherAt = now;
+    this.slitherLevel = level;
+    const n = this.slitherNodes;
+    const l = Math.min(1.2, level);
+    const base = 0.012 + 0.05 * l;
+    n.amp.gain.setTargetAtTime(base, now, 0.1);
+    n.lg.gain.setTargetAtTime(base * 0.8, now, 0.1);
+    n.lfo.frequency.setTargetAtTime(3.5 + 7 * l, now, 0.15);
+    n.bp.frequency.setTargetAtTime(900 + 1500 * l, now, 0.15);
   }
 
   /* ───────────── 배경 드론 ───────────── */

@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import { CFG } from '../../config';
 import { Projectiles } from '../../projectiles';
-import { BLOCKED, type BossInfo, type Circle, type FloatKind, type Host, type Target } from '../../types';
+import { BLOCKED, type Boss, type Circle, type FloatKind, type Host, type Sphere } from '../../types';
 import type { Player } from '../../player';
 import { SpiderRig, type PoseName } from './rig';
-import { buildAttack, type AttackName, type AttackScript } from './attacks';
+import { buildAttack, SEQUENCE_ATTACKS, type AttackName, type AttackScript } from './attacks';
 import { Baby, Egg, type Minion, type MinionOwner } from './minions';
 import { WebZones } from './webzone';
+import { WORLD } from '../../world';
 
 const V3 = THREE.Vector3;
 const S = CFG.spider;
@@ -35,7 +36,11 @@ interface Jump {
  *  공격:      attacks.ts 의 "시간표" (예비동작 → 공격 → 후딜)
  *  이 클래스는 상태머신(등장/대기/공격/사망), 페이즈, 판정, 점프, 미니언 관리를 맡는다.
  */
-export class Spider implements Target, BossInfo, MinionOwner {
+export class Spider implements Boss, MinionOwner {
+  readonly floor = 1;
+  readonly title: string = S.name;
+  readonly floorLabel = '1층 · 거미굴';
+  readonly attackNames: readonly string[] = SEQUENCE_ATTACKS;
   readonly rig: SpiderRig;
   readonly projectiles: Projectiles;
   /** 거미줄 장판 (거미줄 장판 공격이 남기는 끈끈한 바닥) */
@@ -103,6 +108,17 @@ export class Spider implements Target, BossInfo, MinionOwner {
   }
   get pos() {
     return this.rig.pos;
+  }
+  /** 착지하는 순간 등장 카드를 띄운다 */
+  get introBeat() {
+    return this.rig.pos.y <= 0.05;
+  }
+  aimSpheres(): readonly Sphere[] {
+    return [this.rig.thorax, this.rig.abdomenC];
+  }
+  lockPoint(out: THREE.Vector3) {
+    const th = this.rig.thorax;
+    return out.set(th.x, th.y, th.z);
   }
   /** 공격 스크립트가 쓰는 예비동작 길이 배율 */
   get tempo() {
@@ -215,7 +231,7 @@ export class Spider implements Target, BossInfo, MinionOwner {
     }
 
     // 아레나 안에 가두기 (발끝이 벽을 넘지 않게)
-    const lim = CFG.arena.radius - 5;
+    const lim = WORLD.radius - 5;
     const d = Math.hypot(this.pos.x, this.pos.z);
     if (d > lim) {
       this.pos.x *= lim / d;
@@ -336,10 +352,10 @@ export class Spider implements Target, BossInfo, MinionOwner {
   }
 
   /** 디버그: 대기 중이면 다음 공격을 즉시 지정, 공격 중이면 끊고 시작 */
-  forceAttack(name: AttackName) {
+  forceAttack(name: string) {
     if (!this.alive || this.state === 'enter') return;
     if (this.state === 'attack') this.abortAttack();
-    this.forced = name;
+    this.forced = name as AttackName;
     this.idleT = 0;
   }
 
@@ -477,7 +493,7 @@ export class Spider implements Target, BossInfo, MinionOwner {
     // 약점/특수기/큰 피해(많이 모은 불꽃)는 묵직하게
     const heavy = amount >= 6;
     const strong = (kind !== 'normal' && kind !== 'leg') || heavy;
-    this.host.sfx.hit(strong);
+    this.host.sfx.hit(amount);
     if (strong || this.t - this.lastNum > 0.22) {
       this.lastNum = this.t;
       const where = kind === 'special' ? this.tmp.set(this.pos.x, 4, this.pos.z) : this.tmp.set(this.rig.abdomenC.x, 3.4, this.rig.abdomenC.z);

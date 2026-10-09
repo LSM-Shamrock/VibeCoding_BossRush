@@ -48,7 +48,7 @@ const DENY = new Set([
 export function denyReason(code: string): string | null {
   if (!code) return '인식할 수 없는 키입니다';
   if (FIXED_REASON[code]) return FIXED_REASON[code];
-  if (/^Digit[1-9]$/.test(code)) return '숫자 1~9 키는 개발용 디버그 키라 지정할 수 없습니다';
+  if (/^Digit[0-9]$/.test(code)) return '숫자 0~9 키는 개발용 디버그 키라 지정할 수 없습니다';
   if (/^F\d{1,2}$/.test(code)) return '기능 키(F1~F12)는 브라우저가 쓰므로 지정할 수 없습니다';
   if (code === 'Backspace' || code === 'Delete') return '이 키는 칸을 비우는 데 쓰입니다';
   if (DENY.has(code)) return '지정할 수 없는 키입니다';

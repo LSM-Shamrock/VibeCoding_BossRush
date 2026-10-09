@@ -8,6 +8,7 @@ import { PAL } from './palette';
 import { DashFx } from './dashfx';
 import { AimLine } from './aimline';
 import { LostFlames } from './lostflame';
+import { WORLD } from './world';
 
 const V3 = THREE.Vector3;
 
@@ -355,9 +356,9 @@ export class Player {
 
     // 아레나 경계 / 보스 몸통 충돌
     const d = Math.hypot(this.pos.x, this.pos.z);
-    if (d > CFG.arena.playerLimit) {
-      this.pos.x *= CFG.arena.playerLimit / d;
-      this.pos.z *= CFG.arena.playerLimit / d;
+    if (d > WORLD.playerLimit) {
+      this.pos.x *= WORLD.playerLimit / d;
+      this.pos.z *= WORLD.playerLimit / d;
     }
     for (const t of this.host.targets) {
       for (const b of t.bodies()) {
@@ -373,9 +374,9 @@ export class Player {
     }
     // 밀려나서 경계 밖으로 나가지 않게 한 번 더
     const d2 = Math.hypot(this.pos.x, this.pos.z);
-    if (d2 > CFG.arena.playerLimit) {
-      this.pos.x *= CFG.arena.playerLimit / d2;
-      this.pos.z *= CFG.arena.playerLimit / d2;
+    if (d2 > WORLD.playerLimit) {
+      this.pos.x *= WORLD.playerLimit / d2;
+      this.pos.z *= WORLD.playerLimit / d2;
     }
 
     // 사격
@@ -539,7 +540,7 @@ export class Player {
     this.cancelDraw();
     this.arrows.reset();
     this.dashFx.reset();
-    this.pos.set(0, 0, 9);
+    this.pos.set(0, 0, WORLD.spawnZ);
     this.vel.set(0, 0, 0);
     this.knock.set(0, 0, 0);
     this.slowT = 0;
