@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { envHolder } from '../../envmap';
 import { aimed, hull, merge, mirror, spike, taperedTube, type P3 } from '../../geo';
 import type { Circle, Sphere } from '../../types';
+import { DragonLimb, makeLimbKit, type ArmPose, type LegPose } from './limbs';
 
 const V3 = THREE.Vector3;
 type V3 = THREE.Vector3;
@@ -16,7 +17,9 @@ export const BODY_LEN = 200;
 const DS = 0.8;
 export const NR = Math.floor(BODY_LEN / DS) + 1;
 /** 몸통 단면 분할 수 */
-const M = 14;
+const M = 8; // 팔각 단면 (각진 갑옷 몸통)
+/** 갑옷 판 하나의 길이(마디 수) */
+const PLATE = 5;
 const VW = M + 1;
 /** 머리가 지나간 길(궤적)을 남기는 간격 */
 const TS = 0.4;
@@ -119,6 +122,116 @@ function scaleTexture(glow: boolean): THREE.CanvasTexture {
   return t;
 }
 
+/** 갑옷 판 무늬. 한 판(세로 1주기)에 팔각 단면의 면 8개(가로 1주기). glow=true: 판 이음매를 따라 용암빛이 새어 나온다 */
+function armorTexture(glow: boolean): THREE.CanvasTexture {
+  const S = 256;
+  const { cv, g } = canvas2d(S);
+  let seed = glow ? 11 : 23;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  g.fillStyle = glow ? '#000' : '#9c9c9c';
+  g.fillRect(0, 0, S, S);
+  const faces = 8;
+  const fw = S / faces;
+  for (let f = 0; f < faces; f++) {
+    const x0 = f * fw;
+    if (!glow) {
+      // 면: 가운데가 밝고 가장자리가 어두운 비스듬한 면
+      const gr = g.createLinearGradient(x0, 0, x0 + fw, 0);
+      gr.addColorStop(0, '#6e6e6e');
+      gr.addColorStop(0.18, '#bdbdbd');
+      gr.addColorStop(0.5, '#d6d6d6');
+      gr.addColorStop(0.82, '#b0b0b0');
+      gr.addColorStop(1, '#666');
+      g.fillStyle = gr;
+      g.fillRect(x0, 0, fw, S);
+      // 판의 앞 가장자리(위)에 두꺼운 테두리 띠, 아래쪽은 겹침 그림자
+      g.fillStyle = 'rgba(0,0,0,0.5)';
+      g.fillRect(x0, S - 22, fw, 22);
+      g.fillStyle = 'rgba(255,255,255,0.28)';
+      g.fillRect(x0 + 3, 6, fw - 6, 5);
+      // 리벳
+      for (const rx of [x0 + 7, x0 + fw - 7]) {
+        g.fillStyle = '#e8e8e8';
+        g.beginPath();
+        g.arc(rx, 16, 2.6, 0, Math.PI * 2);
+        g.fill();
+        g.fillStyle = 'rgba(0,0,0,0.5)';
+        g.beginPath();
+        g.arc(rx + 0.8, 16.8, 1.6, 0, Math.PI * 2);
+        g.fill();
+      }
+      // 긁힌 자국
+      for (let k = 0; k < 4; k++) {
+        g.strokeStyle = `rgba(20,10,10,${0.18 + rnd() * 0.2})`;
+        g.lineWidth = 1;
+        const sx = x0 + 6 + rnd() * (fw - 12);
+        const sy = 30 + rnd() * 150;
+        g.beginPath();
+        g.moveTo(sx, sy);
+        g.lineTo(sx + (rnd() - 0.5) * 12, sy + 8 + rnd() * 22);
+        g.stroke();
+      }
+    } else {
+      // 이음매 틈(아래쪽)과 면 사이 모서리에서 새어 나오는 빛
+      const hot = rnd() < 0.5;
+      g.fillStyle = hot ? 'rgba(255,120,30,0.9)' : 'rgba(255,80,20,0.55)';
+      g.fillRect(x0 + 2, S - 9, fw - 4, 4);
+      g.fillStyle = 'rgba(255,190,80,0.8)';
+      g.fillRect(x0 + 6, S - 7, fw - 12, 1.6);
+      g.fillStyle = 'rgba(255,90,20,0.35)';
+      g.fillRect(x0, 0, 1.6, S);
+    }
+  }
+  const t = new THREE.CanvasTexture(cv);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  if (!glow) t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+
+/** 날개막: 짙은 적갈색 바탕에 부챗살로 뻗는 핏줄과 힘줄 */
+function membraneTexture(): THREE.CanvasTexture {
+  const W = 256;
+  const H = 256;
+  const { cv, g } = canvas2d(W, H);
+  const gr = g.createLinearGradient(0, 0, 0, H);
+  gr.addColorStop(0, '#5a1710');
+  gr.addColorStop(0.55, '#8a2a14');
+  gr.addColorStop(1, '#b4421c');
+  g.fillStyle = gr;
+  g.fillRect(0, 0, W, H);
+  let seed = 77;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  // 핏줄: 위(중심)에서 아래(가장자리)로 퍼지며 갈라진다
+  for (let k = 0; k < 20; k++) {
+    let x = (k + 0.5) * (W / 20) + (rnd() - 0.5) * 6;
+    g.strokeStyle = `rgba(40,8,6,${0.35 + rnd() * 0.3})`;
+    g.lineWidth = 1 + rnd() * 1.6;
+    g.beginPath();
+    g.moveTo(x, 0);
+    for (let y = 0; y < H; y += 16) {
+      x += (rnd() - 0.5) * 5;
+      g.lineTo(x, y + 16);
+    }
+    g.stroke();
+  }
+  // 가로 힘줄 (얇게)
+  for (let k = 0; k < 6; k++) {
+    g.strokeStyle = 'rgba(255,170,100,0.10)';
+    g.lineWidth = 1;
+    const y = 30 + k * 36;
+    g.beginPath();
+    g.moveTo(0, y);
+    g.lineTo(W, y + (rnd() - 0.5) * 8);
+    g.stroke();
+  }
+  const t = new THREE.CanvasTexture(cv);
+  t.wrapS = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+
 function stdMat(color: number, emissive = 0x000000, rough = 0.55, metal = 0.25, flat = false) {
   const m = new THREE.MeshStandardMaterial({ color, emissive, roughness: rough, metalness: metal, flatShading: flat });
   if (envHolder.tex) {
@@ -153,8 +266,14 @@ interface TrailPt {
   b: number;
 }
 
-interface Bone {
+interface WingPanel {
+  geo: THREE.BufferGeometry;
+  pos: Float32Array;
+  K: number;
+  N: number;
   mesh: THREE.Mesh;
+  bnd: V3[];
+  center: V3;
 }
 
 /**
@@ -187,7 +306,10 @@ export class DragonRig {
   /** 파도 세기 */
   undulate = 0.6;
   wing: WingCtl = { hz: 0.7, amp: 0.55, fold: 0, raise: 0.1, spread: 1 };
-  /** 다리를 접는 정도 0~1 */
+  /** 팔 · 다리 포즈 (동작마다 정해 주면 스프링으로 팍 자리잡는다) */
+  armPose: ArmPose = 'tuck';
+  legPose: LegPose = 'trail';
+  /** (이전 호환용, 쓰지 않는다) */
   tuck = 0.4;
   readonly parts: DragonPart[] = [];
   readonly headSphere: DragonPart;
@@ -200,7 +322,6 @@ export class DragonRig {
   private cur: WingCtl = { hz: 0.7, amp: 0.55, fold: 0, raise: 0.1, spread: 1 };
   private curJaw = 0;
   private curFire = 0;
-  private curTuck = 0.4;
   private curUnd = 0.6;
   private curStun = 0;
   private rageCur = 0;
@@ -236,16 +357,15 @@ export class DragonRig {
   private mouthGlow: THREE.Mesh;
   private mouthLight: THREE.PointLight;
   private whiskers: THREE.Group[] = [];
-  private wings: { side: number; bones: THREE.Mesh[]; mem: THREE.Mesh; memGeo: THREE.BufferGeometry; memPos: Float32Array; pts: V3[] }[] = [];
-  private limbs: { ring: number; side: number; bones: Bone[]; claws: THREE.Mesh; fore: boolean; haunch: THREE.Mesh; knee: THREE.Mesh }[] = [];
-  private limbMat: THREE.MeshStandardMaterial | null = null;
-  private haunchGeo: THREE.BufferGeometry | null = null;
-  private kneeGeo: THREE.BufferGeometry | null = null;
+  private wings: { side: number; bones: THREE.Mesh[]; cuffs: THREE.Mesh[]; joints: THREE.Mesh[]; thumb: THREE.Mesh; tipClaws: THREE.Mesh[]; panels: WingPanel[]; pts: V3[]; mids: V3[] }[] = [];
+  private limbs: { ring: number; limb: DragonLimb }[] = [];
+  private limbKit!: ReturnType<typeof makeLimbKit>;
   private tailBlade: THREE.Mesh;
   private boneGeo = new THREE.CylinderGeometry(0.62, 1, 1, 7, 1).translate(0, 0.5, 0);
   private disposables: Array<{ dispose(): void }> = [];
 
   private f = new V3();
+  private nv = new V3();
   private tv = new V3();
   private tv2 = new V3();
   private m4 = new THREE.Matrix4();
@@ -267,15 +387,18 @@ export class DragonRig {
     for (let i = 0; i < CAP; i++) this.trail.push({ x: 0, y: 0, z: 0, b: 0 });
 
     /* ── 재질 ── */
-    const sc = scaleTexture(false);
-    const glow = scaleTexture(true);
+    const sc = armorTexture(false);
+    const glow = armorTexture(true);
     this.disposables.push(sc, glow);
-    this.bodyMat = stdMat(0xffffff, 0xff5a14, 0.5, 0.3);
+    this.bodyMat = stdMat(0xffffff, 0xff5a14, 0.45, 0.45, true);
+    this.bodyMat.envMapIntensity = 0.9;
     this.bodyMat.vertexColors = true;
     this.bodyMat.map = sc;
     this.bodyMat.emissiveMap = glow;
     this.bodyMat.emissiveIntensity = 0.45;
-    this.memMat = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, emissive: 0xff3a08, emissiveIntensity: 0.1, roughness: 0.8, metalness: 0.0, side: THREE.DoubleSide, transparent: true, opacity: 0.92 });
+    const memTex = membraneTexture();
+    this.disposables.push(memTex);
+    this.memMat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: memTex, emissive: 0xff3a08, emissiveIntensity: 0.1, roughness: 0.8, metalness: 0.0, side: THREE.DoubleSide, transparent: true, opacity: 0.94 });
     this.boneMat = stdMat(0x2b1210, 0x3a0c04, 0.6, 0.35, true);
     this.eyeMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 1.7, 0.4), toneMapped: false });
     this.disposables.push(this.bodyMat, this.memMat, this.boneMat, this.eyeMat);
@@ -291,13 +414,13 @@ export class DragonRig {
     for (let i = 0; i < NR; i++) {
       const tailK = smooth((i * DS - 80) / 120);
       for (let j = 0; j < VW; j++) {
-        const a = (j / M) * TAU;
+        const a = ((j + 0.5) / M) * TAU;
         const v = i * VW + j;
-        uv[v * 2] = (j / M) * 4;
-        uv[v * 2 + 1] = (i * DS) / 3.6;
+        uv[v * 2] = j / M;
+        uv[v * 2 + 1] = i / PLATE;
         const belly = smooth(-Math.sin(a) * 1.7 - 0.12);
-        const back = [0.42 - 0.12 * tailK, 0.07, 0.055];
-        const bel = [0.92, 0.62, 0.3];
+        const back = [0.66 - 0.16 * tailK, 0.12, 0.09];
+        const bel = [0.9, 0.66, 0.36];
         col[v * 3] = lerp(back[0], bel[0], belly);
         col[v * 3 + 1] = lerp(back[1], bel[1], belly);
         col[v * 3 + 2] = lerp(back[2], bel[2], belly);
@@ -325,9 +448,12 @@ export class DragonRig {
     this.disposables.push(this.bodyGeo);
 
     /* ── 등 가시 ── */
-    this.nSpine = Math.floor((NR - 8) / 2);
-    const spGeo = merge([spike(1.7, 0.36, 5), aimed(spike(0.9, 0.2, 4), [0.0, 0.0, 0.0], [0.35, 1, 0])]);
-    this.spines = new THREE.InstancedMesh(spGeo, dark, this.nSpine);
+    this.nSpine = Math.floor((NR - 8) / PLATE);
+    // 각진 뿔판: 아래가 넓고 뒤로 휘어 넘어간 칼날
+    const spGeo = hull([[-0.34, 0, -1.3], [0.34, 0, -1.3], [-0.34, 0, 1.5], [0.34, 0, 1.5], [0, 3.0, -1.2], [0, 1.0, 1.0]]);
+    const bladeMat = stdMat(0x5a1410, 0x3a0a04, 0.42, 0.5, true);
+    this.disposables.push(bladeMat);
+    this.spines = new THREE.InstancedMesh(spGeo, bladeMat, this.nSpine);
     this.spines.frustumCulled = false;
     this.spines.castShadow = true;
     this.group.add(this.spines);
@@ -349,8 +475,13 @@ export class DragonRig {
     this.group.add(this.headRoot);
 
     /* ── 날개 · 다리 · 꼬리 칼날 ── */
+    const limbArmor = stdMat(0x7a1a12, 0x4a0e04, 0.4, 0.6, true);
+    limbArmor.emissiveIntensity = 0.55;
+    this.disposables.push(limbArmor);
+    this.limbKit = makeLimbKit(limbArmor, dark, horn);
+    this.disposables.push(this.limbKit.seg, this.limbKit.cuff, this.limbKit.joint, this.limbKit.claw, this.limbKit.spike);
     for (const side of [1, -1]) this.buildWing(side);
-    for (const [ring, fore] of [[IFL, true], [IHL, false]] as [number, boolean][]) for (const side of [1, -1]) this.buildLimb(ring, side, fore, dark, horn);
+    for (const [ring, fore] of [[IFL, true], [IHL, false]] as [number, boolean][]) for (const side of [1, -1]) this.limbs.push({ ring, limb: new DragonLimb(this.group, this.limbKit, side, fore) });
     const blade = hull(mirror([[0, 0.14, 0], [0.55, 0.14, -0.6], [1.35, 0.1, -2.0], [0.5, 0.06, -3.6], [0, 0.04, -5.2], [0, -0.14, 0], [0.55, -0.14, -0.6], [1.35, -0.1, -2.0], [0.5, -0.06, -3.6]]));
     this.tailBlade = new THREE.Mesh(blade, stdMat(0x1a0d0c, 0x3a0c04, 0.5, 0.5, true));
     this.tailBlade.castShadow = true;
@@ -509,78 +640,93 @@ export class DragonRig {
   }
 
   private buildWing(side: number) {
+    // 뼈대: 팔 2 + 손가락 4×2마디 (손가락이 살짝 꺾여 휘어진다)
     const bones: THREE.Mesh[] = [];
-    for (let i = 0; i < 6; i++) {
-      const m = new THREE.Mesh(this.boneGeo, this.boneMat);
+    for (let i = 0; i < 10; i++) {
+      const m = new THREE.Mesh(this.limbKit.seg, this.boneMat);
       m.castShadow = true;
       m.frustumCulled = false;
       this.group.add(m);
       bones.push(m);
     }
-    // 날개막: S E W F1 F2 F3 F4 M1 M2 M3 B0 M4
-    const NV = 12;
-    const memPos = new Float32Array(NV * 3);
-    const memCol = new Float32Array(NV * 3);
-    const cols = [
-      [0.22, 0.04, 0.035], // S
-      [0.26, 0.05, 0.04], // E
-      [0.32, 0.06, 0.04], // W
-      [0.62, 0.14, 0.06], // F1
-      [0.7, 0.18, 0.07],
-      [0.78, 0.22, 0.08],
-      [0.85, 0.28, 0.09], // F4
-      [0.52, 0.1, 0.05], // M1
-      [0.58, 0.12, 0.05],
-      [0.64, 0.14, 0.06],
-      [0.5, 0.1, 0.05], // B0
-      [0.6, 0.13, 0.05], // M4
-    ];
-    for (let i = 0; i < NV; i++) cols[i].forEach((c, k) => (memCol[i * 3 + k] = c * 0.55));
-    const tri = [2, 3, 7, 2, 7, 4, 2, 4, 8, 2, 8, 5, 2, 5, 9, 2, 9, 6, 2, 6, 11, 2, 11, 10, 2, 10, 0, 2, 0, 1];
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(memPos, 3).setUsage(THREE.DynamicDrawUsage));
-    g.setAttribute('color', new THREE.BufferAttribute(memCol, 3));
-    g.setIndex(tri);
-    const mem = new THREE.Mesh(g, this.memMat);
-    mem.frustumCulled = false;
-    mem.castShadow = true;
-    this.group.add(mem);
-    this.disposables.push(g);
-    const pts: V3[] = [];
-    for (let i = 0; i < 12; i++) pts.push(new V3());
-    this.wings.push({ side, bones, mem, memGeo: g, memPos, pts });
-  }
-
-  private buildLimb(ring: number, side: number, fore: boolean, dark: THREE.Material, horn: THREE.Material) {
-    const bones: Bone[] = [];
-    // 다리 재질: 몸통과 같은 붉은 비늘빛 (뒷다리는 근육이 불룩하게)
-    if (!this.limbMat) {
-      this.limbMat = stdMat(0x8a2418, 0x6a1606, 0.55, 0.25, true);
-      this.limbMat.emissiveIntensity = 0.85;
-      this.disposables.push(this.limbMat);
-      this.haunchGeo = new THREE.SphereGeometry(1, 14, 10);
-      this.disposables.push(this.haunchGeo);
-    }
-    for (let i = 0; i < 3; i++) {
-      const m = new THREE.Mesh(this.boneGeo, i === 2 ? dark : this.limbMat);
+    // 갑옷 띠 (팔뼈 두 마디에 두 개씩), 관절 덩어리(어깨·팔꿈치·손목), 엄지발톱, 손가락 끝 발톱
+    const cuffs: THREE.Mesh[] = [];
+    for (let i = 0; i < 4; i++) {
+      const m = new THREE.Mesh(this.limbKit.cuff, this.limbKit.armor);
       m.castShadow = true;
       m.frustumCulled = false;
       this.group.add(m);
-      bones.push({ mesh: m });
+      cuffs.push(m);
     }
-    const haunch = new THREE.Mesh(this.haunchGeo!, this.limbMat);
-    haunch.castShadow = true;
-    haunch.frustumCulled = false;
-    this.group.add(haunch);
-    const knee = new THREE.Mesh(this.kneeGeo ?? (this.kneeGeo = spike(1.6, 0.5, 4)), dark);
-    knee.frustumCulled = false;
-    this.group.add(knee);
-    const claws = merge([0, 1, 2, 3].map((k) => aimed(spike(1.0, 0.14, 4), [(k - 1.5) * 0.3, 0, 0.1], [(k - 1.5) * 0.28, -0.7, 0.8])));
-    const cm = new THREE.Mesh(claws, horn);
-    cm.frustumCulled = false;
-    this.group.add(cm);
-    this.disposables.push(claws, this.kneeGeo);
-    this.limbs.push({ ring, side, bones, claws: cm, fore, haunch, knee });
+    const joints: THREE.Mesh[] = [];
+    for (let i = 0; i < 3; i++) {
+      const m = new THREE.Mesh(this.limbKit.joint, this.limbKit.armor);
+      m.castShadow = true;
+      m.frustumCulled = false;
+      this.group.add(m);
+      joints.push(m);
+    }
+    const thumb = new THREE.Mesh(this.limbKit.spike, this.limbKit.horn);
+    thumb.frustumCulled = false;
+    this.group.add(thumb);
+    const tipClaws: THREE.Mesh[] = [];
+    for (let i = 0; i < 4; i++) {
+      const m = new THREE.Mesh(this.limbKit.claw, this.limbKit.horn);
+      m.frustumCulled = false;
+      this.group.add(m);
+      tipClaws.push(m);
+    }
+    // 날개막 조각들: 가운데에서 가장자리로 겹겹이 펼쳐지는 부채꼴 격자
+    const panels: WingPanel[] = [];
+    const spec: [number, number][] = [
+      [14, 5], // 손가락 사이 3장
+      [14, 5],
+      [14, 5],
+      [20, 6], // 몸 쪽 넓은 막
+      [9, 2], // 팔꿈치 앞 작은 막
+    ];
+    for (const [K, N] of spec) panels.push(this.makePanel(K, N));
+    const pts: V3[] = [];
+    for (let i = 0; i < 12; i++) pts.push(new V3());
+    const mids: V3[] = [new V3(), new V3(), new V3(), new V3()];
+    this.wings.push({ side, bones, cuffs, joints, thumb, tipClaws, panels, pts, mids });
+  }
+
+  private makePanel(K: number, N: number): WingPanel {
+    const nv = 1 + K * N;
+    const pos = new Float32Array(nv * 3);
+    const uv = new Float32Array(nv * 2);
+    uv[0] = 0.5;
+    uv[1] = 0;
+    for (let r = 1; r <= N; r++) {
+      for (let k = 0; k < K; k++) {
+        const v = 1 + (r - 1) * K + k;
+        uv[v * 2] = k / K;
+        uv[v * 2 + 1] = r / N;
+      }
+    }
+    const idx: number[] = [];
+    for (let k = 0; k < K; k++) idx.push(0, 1 + k, 1 + ((k + 1) % K));
+    for (let r = 1; r < N; r++) {
+      for (let k = 0; k < K; k++) {
+        const a0 = 1 + (r - 1) * K + k;
+        const a1 = 1 + (r - 1) * K + ((k + 1) % K);
+        const b0 = a0 + K;
+        const b1 = a1 + K;
+        idx.push(a0, b0, a1, a1, b0, b1);
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    geo.setIndex(idx);
+    const mesh = new THREE.Mesh(geo, this.memMat);
+    mesh.frustumCulled = false;
+    mesh.castShadow = true;
+    this.group.add(mesh);
+    const bnd: V3[] = [];
+    for (let i = 0; i < K; i++) bnd.push(new V3());
+    return { geo, pos, K, N, mesh, bnd, center: new V3() };
   }
 
   /* ───────────────────────── 배치 · 제어 ───────────────────────── */
@@ -804,7 +950,6 @@ export class DragonRig {
     W.spread = approach(W.spread, g.spread, 4, dt);
     this.curJaw = approach(this.curJaw, this.jaw, 9, dt);
     this.curFire = approach(this.curFire, this.fire, 6, dt);
-    this.curTuck = approach(this.curTuck, this.tuck, 3, dt);
     this.curUnd = approach(this.curUnd, this.undulate, 2, dt);
     this.curStun = approach(this.curStun, this.stunned ? 1 : 0, 6, dt);
     this.rageCur = approach(this.rageCur, this.rage, 1.5, dt);
@@ -873,7 +1018,7 @@ export class DragonRig {
     this.updateBody();
     this.updateHead(dt);
     this.updateWings();
-    this.updateLimbs();
+    this.updateLimbs(dt);
     this.updateParts();
     this.updateMaterials(t);
   }
@@ -885,11 +1030,17 @@ export class DragonRig {
       const c = this.Pout[i];
       const R = this.Rv[i];
       const U = this.U[i];
-      const rr = RAD[i] * (1 + 0.03 * Math.sin(this.t * 2.4 - i * 0.25));
+      // 갑옷 판: 판마다 뒤쪽으로 갈수록 살짝 불룩해졌다가 다음 판 앞에서 홈이 진다 (기와처럼 겹친 단)
+      const pk = (i % PLATE) / PLATE;
+      const lam = pk === 0 ? 0.86 : 0.97 + 0.13 * pk;
+      const rr = RAD[i] * lam * (1 + 0.012 * Math.sin(this.t * 2.4 - i * 0.25));
       for (let j = 0; j < VW; j++) {
-        const a = (j / M) * TAU;
-        const x = Math.cos(a) * rr;
-        const y = Math.sin(a) * rr * flat;
+        const a = ((j + 0.5) / M) * TAU;
+        // 등 쪽 면은 더 높게 솟은 능선
+        const top = Math.max(0, Math.sin(a) - 0.4) * (pk < 0.6 ? 1 : 0.7);
+        const rv = rr * (1 + 0.2 * top);
+        const x = Math.cos(a) * rv;
+        const y = Math.sin(a) * rv * flat;
         const v = (i * VW + j) * 3;
         pos[v] = c.x + R.x * x + U.x * y;
         pos[v + 1] = c.y + R.y * x + U.y * y;
@@ -898,21 +1049,21 @@ export class DragonRig {
     }
     const attr = this.bodyGeo.getAttribute('position') as THREE.BufferAttribute;
     attr.needsUpdate = true;
-    this.bodyGeo.computeVertexNormals();
+    // (플랫 셰이딩이라 법선은 화면에서 계산된다)
 
     // 등 가시
     for (let k = 0; k < this.nSpine; k++) {
-      const i = 4 + k * 2;
+      const i = 4 + k * PLATE + 2;
       const c = this.Pout[i];
       const U = this.U[i];
       const T = this.T[i];
       const R = this.Rv[i];
-      this.tv.copy(U).addScaledVector(T, -0.5).normalize();
+      this.tv.copy(U).addScaledVector(T, -0.35).normalize();
       this.tv2.crossVectors(R, this.tv).normalize();
       this.m4.makeBasis(R, this.tv, this.tv2);
-      const sz = i < 14 ? 0.8 + i * 0.05 : clamp(RAD[i] * 0.62 + 0.4, 0.5, 2.4);
-      this.m4.scale(this.sv.set(sz, sz * (1 + 0.12 * Math.sin(this.t * 3 + i)), sz));
-      this.m4.setPosition(c.x + U.x * RAD[i] * 0.86, c.y + U.y * RAD[i] * 0.86, c.z + U.z * RAD[i] * 0.86);
+      const sz = i < 14 ? 0.8 + i * 0.05 : clamp(RAD[i] * 0.6 + 0.4, 0.6, 2.7);
+      this.m4.scale(this.sv.set(sz * 0.9, sz, sz));
+      this.m4.setPosition(c.x + U.x * RAD[i] * 1.12, c.y + U.y * RAD[i] * 1.12, c.z + U.z * RAD[i] * 1.12);
       this.spines.setMatrixAt(k, this.m4);
     }
     this.spines.instanceMatrix.needsUpdate = true;
@@ -951,7 +1102,78 @@ export class DragonRig {
     void dt;
   }
 
-  /** 날개 한쪽의 관절 위치를 구한다 */
+  /** 날갯짓 곡선: 아래로 빠르게 내리치고(전체의 40%) 위로는 느리게 들어올린다. +1 = 위 끝, -1 = 아래 끝 */
+  private stroke(ph: number) {
+    const p = ph - Math.floor(ph);
+    const D = 0.4;
+    if (p < D) {
+      const x = p / D;
+      return 1 - 2 * (1 - (1 - x) * (1 - x));
+    }
+    const x = (p - D) / (1 - D);
+    return -1 + 2 * (x * x * (3 - 2 * x));
+  }
+
+  /** 가장자리 한 변(a→b)을 n개로 나눠 out 에 이어 붙인다. bowTo 쪽으로 오목하게 휘어 손가락 사이가 파인 날개막 가장자리가 된다 */
+  private edgeSamples(out: V3[], at: { i: number }, a: V3, b: V3, n: number, bowTo?: V3, bow = 0) {
+    for (let k = 0; k < n; k++) {
+      const t = k / n;
+      const q = out[at.i++];
+      q.lerpVectors(a, b, t);
+      if (bowTo && bow) q.lerp(bowTo, bow * Math.sin(Math.PI * t));
+    }
+  }
+
+  /** 날개막 한 장을 가운데에서 가장자리로 펼쳐 채운다 (바람에 부푸는 물결 포함) */
+  private fillPanel(pn: WingPanel, billow: number, ripple: number, size: number) {
+    const { bnd, K, N, pos, center } = pn;
+    center.set(0, 0, 0);
+    for (let k = 0; k < K; k++) center.add(bnd[k]);
+    center.multiplyScalar(1 / K);
+    // 면의 방향(법선): 위쪽을 향하게
+    this.tv.subVectors(bnd[Math.floor(K / 4)], center);
+    this.tv2.subVectors(bnd[Math.floor((K * 3) / 4)], center);
+    const nrm = this.nv.crossVectors(this.tv, this.tv2).normalize();
+    if (nrm.y < 0) nrm.negate();
+    pos[0] = center.x;
+    pos[1] = center.y + billow * 0.3 * size;
+    pos[2] = center.z;
+    pos[0] += nrm.x * billow * 0.3 * size;
+    pos[2] += nrm.z * billow * 0.3 * size;
+    for (let r = 1; r <= N; r++) {
+      const f = r / N;
+      const lift = billow * size * (f * (1.2 - 0.5 * f));
+      for (let k = 0; k < K; k++) {
+        const v = (1 + (r - 1) * K + k) * 3;
+        const b = bnd[k];
+        const rip = ripple * size * Math.sin(f * 8 - this.t * 7 + k * 0.9) * f;
+        const sag = -0.035 * size * f * (1 - f) * 2;
+        pos[v] = center.x + (b.x - center.x) * f + nrm.x * (lift + rip);
+        pos[v + 1] = center.y + (b.y - center.y) * f + nrm.y * (lift + rip) + sag;
+        pos[v + 2] = center.z + (b.z - center.z) * f + nrm.z * (lift + rip);
+        if (pos[v + 1] < 0.1) pos[v + 1] = 0.1;
+      }
+    }
+    (pn.geo.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
+    pn.geo.computeVertexNormals();
+    pn.geo.computeBoundingSphere();
+  }
+
+  private placeCuff(m: THREE.Mesh, a: V3, b: V3, r: number, t0: number, len: number) {
+    this.tv.subVectors(b, a);
+    const L = this.tv.length();
+    if (L < 1e-4) {
+      m.scale.set(0, 0, 0);
+      return;
+    }
+    this.tv.multiplyScalar(1 / L);
+    m.position.lerpVectors(a, b, t0);
+    m.quaternion.setFromUnitVectors(UP, this.tv);
+    const rr = r * (1 - 0.38 * t0);
+    m.scale.set(rr, L * len, rr);
+  }
+
+  /** 날개 한쪽의 관절 위치를 구하고 뼈 · 날개막을 놓는다 */
   private updateWings() {
     const W = this.cur;
     const i = IW;
@@ -962,9 +1184,15 @@ export class DragonRig {
     const rad = RAD[i];
     const fold = W.fold;
     const stun = this.curStun;
-    const th = this.flapPh;
-    const shape = (p: number) => Math.sin(p) + 0.22 * Math.sin(2 * p);
-    const lenK = 1 - 0.42 * fold;
+    const ph = this.flapPh / TAU;
+    const f0 = this.stroke(ph);
+    const fVel = (this.stroke(ph + 0.012) - this.stroke(ph - 0.012)) / 0.024; // 방향 · 빠르기 (아래로 내리칠 때 음수)
+    const upW = ph - Math.floor(ph) > 0.4 ? Math.sin(Math.PI * ((ph - Math.floor(ph) - 0.4) / 0.6)) : 0;
+    const ampK = Math.min(1, W.amp * 2.2);
+    const lenK = (1 - 0.42 * fold) * (1 - 0.13 * upW * ampK);
+    // 공기를 받아 막이 부푸는 정도: 내리칠 때 위로 크게 부풀고, 올릴 때는 아래로 처진다
+    const billow = clamp(-fVel * W.hz * 0.045 * Math.min(1, W.amp * 1.6), -0.5, 0.95) + 0.05 * (1 - fold);
+    const ripple = 0.012 + 0.014 * ampK;
     const dir = (side: number, sweep: number, elev: number, out: V3) => {
       const ce = Math.cos(elev);
       const lx = side * Math.cos(sweep) * ce;
@@ -981,11 +1209,11 @@ export class DragonRig {
       const side = w.side;
       const bias = 0.12 + W.raise - stun * 0.9;
       const amp = W.amp * (1 - stun);
-      const eA = bias + amp * shape(th) * 1.0;
-      const eB = bias * 0.9 + amp * shape(th - 0.28);
+      const eA = bias + amp * f0;
+      const eB = bias * 0.9 + amp * this.stroke(ph - 0.07) * 1.08;
       const sweepA = lerp(0.95, 1.38, fold);
       const sweepB = lerp(-0.18, 1.45, fold);
-      const S = this.pv.set(c0.x + R.x * side * rad * 0.5 + U.x * rad * 0.62, c0.y + R.y * side * rad * 0.5 + U.y * rad * 0.62, c0.z + R.z * side * rad * 0.5 + U.z * rad * 0.62).clone();
+      const S = this.pv.set(c0.x + R.x * side * rad * 0.55 + U.x * rad * 0.7, c0.y + R.y * side * rad * 0.55 + U.y * rad * 0.7, c0.z + R.z * side * rad * 0.55 + U.z * rad * 0.7).clone();
       const d1 = dir(side, sweepA, eA, this.tv);
       const E = S.clone().addScaledVector(d1, ARM[0] * WS * lenK);
       const d2 = dir(side, sweepB, eB, this.tv);
@@ -994,34 +1222,91 @@ export class DragonRig {
       p[0].copy(S);
       p[1].copy(E);
       p[2].copy(Wr);
-      // 손가락뼈: 시간차를 두고 꺾인다 (끝이 늦게 따라온다)
-      const spreadK = lerp(0.55, 1, W.spread) * (1 - fold);
+      // 손가락뼈: 시간차를 두고 꺾인다 (끝이 늦게 따라온다). 올릴 때는 손가락을 모은다
+      const spreadK = lerp(0.55, 1, W.spread) * (1 - fold) * (1 - 0.3 * upW * ampK);
       for (let k = 0; k < 4; k++) {
         const sweepF = lerp(0.12 + k * 0.4 * spreadK + 0.1 * (1 - spreadK), 1.5, fold);
-        const elevF = bias * 0.8 + amp * shape(th - 0.52 - 0.14 * k) * (1.05 + 0.1 * k) - 0.04 * k;
+        const elevF = bias * 0.8 + amp * this.stroke(ph - 0.15 - 0.05 * k) * (1.05 + 0.1 * k) - 0.04 * k;
         const d = dir(side, sweepF, elevF, this.tv);
         p[3 + k].copy(Wr).addScaledVector(d, FING[k] * WS * lenK);
+        // 중간 관절: 날개가 공기를 받는 쪽으로 살짝 휜다
+        const mid = w.mids[k];
+        mid.lerpVectors(Wr, p[3 + k], 0.52);
+        mid.y += (0.5 + billow) * 0.028 * FING[k] * WS * lenK * ampK;
       }
       // 날개막 뒤쪽 끝 = 허리 옆
-      p[10].set(hip.x + hipR.x * side * RAD[IH] * 0.7 + hipU.x * RAD[IH] * 0.1, hip.y + hipR.y * side * RAD[IH] * 0.7 + hipU.y * RAD[IH] * 0.1, hip.z + hipR.z * side * RAD[IH] * 0.7 + hipU.z * RAD[IH] * 0.1);
-      // 막 가장자리: 손가락 사이가 안쪽으로 파인다
-      const scal = 0.2 + 0.12 * Math.sin(th * 2 + side);
-      for (let k = 0; k < 3; k++) p[7 + k].lerpVectors(p[3 + k], p[4 + k], 0.5).lerp(p[2], scal);
-      p[11].lerpVectors(p[6], p[10], 0.5).lerp(p[2], scal);
-      // 늘어진 날개가 땅을 뚫지 않게
+      p[10].set(hip.x + hipR.x * side * RAD[IH] * 0.8 + hipU.x * RAD[IH] * 0.1, hip.y + hipR.y * side * RAD[IH] * 0.8 + hipU.y * RAD[IH] * 0.1, hip.z + hipR.z * side * RAD[IH] * 0.8 + hipU.z * RAD[IH] * 0.1);
       for (let k = 0; k < 12; k++) if (p[k].y < 0.12) p[k].y = 0.12;
-      for (let k = 0; k < 12; k++) {
-        w.memPos[k * 3] = p[k].x;
-        w.memPos[k * 3 + 1] = p[k].y;
-        w.memPos[k * 3 + 2] = p[k].z;
+      for (let k = 0; k < 4; k++) if (w.mids[k].y < 0.12) w.mids[k].y = 0.12;
+
+      // ── 날개막 ── 손가락 사이 오목하게 파인 가장자리
+      const scal = 0.2 + 0.1 * upW * ampK + 0.04 * Math.sin(this.t * 2 + side);
+      const at = { i: 0 };
+      for (let pi = 0; pi < 3; pi++) {
+        const pn = w.panels[pi];
+        at.i = 0;
+        const B = pn.bnd;
+        this.edgeSamples(B, at, Wr, w.mids[pi], 2);
+        this.edgeSamples(B, at, w.mids[pi], p[3 + pi], 2);
+        this.edgeSamples(B, at, p[3 + pi], p[4 + pi], 6, Wr, scal);
+        this.edgeSamples(B, at, p[4 + pi], w.mids[pi + 1], 2);
+        this.edgeSamples(B, at, w.mids[pi + 1], Wr, 2);
+        this.fillPanel(pn, billow, ripple, FING[pi] * WS * lenK * 0.06);
       }
-      (w.memGeo.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true;
-      w.memGeo.computeVertexNormals();
-      w.memGeo.computeBoundingSphere();
-      // 뼈대
-      this.setBone(w.bones[0], p[0], p[1], 1.3);
-      this.setBone(w.bones[1], p[1], p[2], 1.1);
-      for (let k = 0; k < 4; k++) this.setBone(w.bones[2 + k], p[2], p[3 + k], 0.62 - k * 0.04);
+      {
+        const pn = w.panels[3];
+        at.i = 0;
+        const B = pn.bnd;
+        this.edgeSamples(B, at, p[0], p[1], 3);
+        this.edgeSamples(B, at, p[1], p[2], 3);
+        this.edgeSamples(B, at, p[2], w.mids[3], 2);
+        this.edgeSamples(B, at, w.mids[3], p[6], 2);
+        this.edgeSamples(B, at, p[6], p[10], 7, p[2], scal * 1.1);
+        this.edgeSamples(B, at, p[10], p[0], 3);
+        this.fillPanel(pn, billow, ripple, FING[3] * WS * lenK * 0.06);
+      }
+      {
+        const pn = w.panels[4];
+        at.i = 0;
+        const B = pn.bnd;
+        this.edgeSamples(B, at, p[0], p[1], 3);
+        this.edgeSamples(B, at, p[1], p[2], 3);
+        this.edgeSamples(B, at, p[2], p[0], 3);
+        this.fillPanel(pn, billow * 0.5, ripple * 0.5, ARM[1] * WS * 0.05);
+      }
+
+      // ── 뼈대 ──
+      const bs = WS / 0.95; // 이전 굵기 대비 배율
+      this.setBone(w.bones[0], p[0], p[1], 0.42 * bs);
+      this.setBone(w.bones[1], p[1], p[2], 0.36 * bs);
+      for (let k = 0; k < 4; k++) {
+        this.setBone(w.bones[2 + k * 2], p[2], w.mids[k], (0.2 - k * 0.012) * bs * 1.05);
+        this.setBone(w.bones[3 + k * 2], w.mids[k], p[3 + k], (0.15 - k * 0.01) * bs);
+        // 손가락 끝 발톱
+        const tc = w.tipClaws[k];
+        tc.position.copy(p[3 + k]);
+        this.tv.subVectors(p[3 + k], w.mids[k]).normalize();
+        tc.quaternion.setFromUnitVectors(UP, this.tv);
+        tc.scale.setScalar(1.6 + (3 - k) * 0.25);
+      }
+      this.placeCuff(w.cuffs[0], p[0], p[1], 0.42 * bs * 1.5, 0.1, 0.3);
+      this.placeCuff(w.cuffs[1], p[0], p[1], 0.42 * bs * 1.5, 0.58, 0.22);
+      this.placeCuff(w.cuffs[2], p[1], p[2], 0.36 * bs * 1.5, 0.1, 0.3);
+      this.placeCuff(w.cuffs[3], p[1], p[2], 0.36 * bs * 1.5, 0.6, 0.22);
+      const jm = (m: THREE.Mesh, q: V3, r: number) => {
+        m.position.copy(q);
+        m.scale.setScalar(r);
+        m.rotation.set(q.x * 0.3, q.z * 0.3, 0);
+      };
+      jm(w.joints[0], p[0], 0.62 * bs);
+      jm(w.joints[1], p[1], 0.5 * bs);
+      jm(w.joints[2], p[2], 0.52 * bs);
+      // 손목의 엄지발톱: 앞쪽(날개 앞가장자리 바깥)으로 솟는다
+      w.thumb.position.copy(p[2]);
+      this.tv.subVectors(p[2], p[1]).normalize();
+      this.tv.addScaledVector(U, 0.6).addScaledVector(T, 0.5).normalize();
+      w.thumb.quaternion.setFromUnitVectors(UP, this.tv);
+      w.thumb.scale.setScalar(5.5);
       tips[wi].copy(p[3]);
     }
   }
@@ -1039,70 +1324,20 @@ export class DragonRig {
     m.scale.set(r, L, r);
   }
 
-  /**
-   * 다리: 날아다니는 자세 — 허벅지는 굵게 아래뒤로, 정강이와 발은 몸 뒤쪽으로 쭉 젖혀 늘어뜨린다 (매가 발을 접어 넣은 모양).
-   * tuck(0~1)이 클수록 더 뒤로 젖혀진다. 평소에도 항상 0.75 이상 젖혀 둔다.
-   */
-  private updateLimbs() {
-    const pose = clamp(0.78 + 0.22 * this.curTuck, 0, 1);
-    const t = this.t;
-    const A = this.tv;
-    for (const l of this.limbs) {
-      const c = this.Pout[l.ring];
-      const R = this.Rv[l.ring];
-      const U = this.U[l.ring];
-      const T = this.T[l.ring];
-      const rad = RAD[l.ring];
-      const s = l.side;
-      const fore = l.fore;
-      const sway = Math.sin(t * 1.7 + l.ring + s) * 0.06;
-      // 길이 (뒷다리가 훨씬 길고 굵다)
-      const L1 = fore ? 3.4 : 6.2;
-      const L2 = fore ? 3.6 : 6.4;
-      const L3 = fore ? 2.4 : 4.4;
-      const r1 = fore ? 1.0 : 2.0;
-      const r2 = fore ? 0.7 : 1.3;
-      const r3 = fore ? 0.55 : 0.95;
-      // 방향 (x = 바깥쪽, y = 위, z = 앞)
-      const d1 = this.dirLocal(s, lerp(0.25, 0.42, pose), lerp(-0.92, -0.5, pose) + sway, lerp(0.1, fore ? -0.55 : -0.78, pose), R, U, T, this.d1);
-      const d2 = this.dirLocal(s, lerp(0.1, 0.14, pose), lerp(-0.96, fore ? -0.28 : -0.1, pose) - sway, lerp(0.2, -0.95, pose), R, U, T, this.d2);
-      const d3 = this.dirLocal(s, 0.04, lerp(-0.7, -0.42, pose) + sway, lerp(0.7, -0.88, pose), R, U, T, this.d3);
-      const hip = this.pv.set(c.x + R.x * s * rad * 0.72 - U.x * rad * 0.5, c.y + R.y * s * rad * 0.72 - U.y * rad * 0.5, c.z + R.z * s * rad * 0.72 - U.z * rad * 0.5).clone();
-      const knee = hip.clone().addScaledVector(d1, L1);
-      const foot = knee.clone().addScaledVector(d2, L2);
-      const toe = foot.clone().addScaledVector(d3, L3);
-      if (foot.y < 0.3) foot.y = 0.3;
-      if (toe.y < 0.2) toe.y = 0.2;
-      this.setBone(l.bones[0].mesh, hip, knee, r1);
-      this.setBone(l.bones[1].mesh, knee, foot, r2);
-      this.setBone(l.bones[2].mesh, foot, toe, r3);
-      // 허벅지 근육(불룩한 덩어리) · 무릎 가시
-      A.copy(d1);
-      l.haunch.position.copy(hip).addScaledVector(d1, L1 * 0.42);
-      l.haunch.quaternion.setFromUnitVectors(Z_AXIS, A);
-      l.haunch.scale.set(r1 * 1.25, r1 * 1.15, L1 * 0.62);
-      l.knee.position.copy(knee);
-      this.tv2.copy(d1).sub(d2).normalize();
-      l.knee.quaternion.setFromUnitVectors(UP, this.tv2.lengthSq() > 0.01 ? this.tv2 : UP);
-      l.knee.scale.setScalar(fore ? 0.7 : 1.1);
-      // 발톱: 발끝에서 아래쪽으로 갈고리처럼 굽는다
-      l.claws.position.copy(toe);
-      this.tv2.copy(d3);
-      A.crossVectors(U, this.tv2).normalize();
-      this.sv.crossVectors(this.tv2, A).normalize();
-      this.m4.makeBasis(A, this.sv, this.tv2);
-      l.claws.quaternion.setFromRotationMatrix(this.m4);
-      l.claws.scale.setScalar(fore ? 1.6 : 2.6);
+  /** 팔다리: 동작에 맞는 포즈로 스프링을 통해 팍 자리잡는다 */
+  private updateLimbs(dt: number) {
+    const lie = this.lyingK > 0 || this.curStun > 0.5;
+    for (const { ring, limb } of this.limbs) {
+      limb.setPose(limb.fore ? (lie ? 'lie' : this.armPose) : (lie ? 'lie' : this.legPose));
+      this.lf.c = this.Pout[ring];
+      this.lf.R = this.Rv[ring];
+      this.lf.U = this.U[ring];
+      this.lf.T = this.T[ring];
+      this.lf.rad = RAD[ring];
+      limb.update(dt, this.lf, this.t);
     }
   }
-
-  private d1 = new V3();
-  private d2 = new V3();
-  private d3 = new V3();
-  private dirLocal(side: number, x: number, y: number, z: number, R: V3, U: V3, T: V3, out: V3) {
-    out.set(R.x * side * x + U.x * y + T.x * z, R.y * side * x + U.y * y + T.y * z, R.z * side * x + U.z * y + T.z * z);
-    return out.normalize();
-  }
+  private lf: { c: V3; R: V3; U: V3; T: V3; rad: number } = { c: new V3(), R: new V3(), U: new V3(), T: new V3(), rad: 1 };
 
   private updateParts() {
     const hr = this.headRoot;
@@ -1157,7 +1392,7 @@ export class DragonRig {
     this.spines.dispose();
     for (const d of this.disposables) d.dispose();
     this.boneGeo.dispose();
-    for (const w of this.wings) w.memGeo.dispose();
+    for (const w of this.wings) for (const pn of w.panels) pn.geo.dispose();
     this.mouthLight.dispose();
   }
 }

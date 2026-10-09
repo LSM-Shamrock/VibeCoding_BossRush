@@ -168,7 +168,8 @@ export class Dragon implements Boss {
     r.jaw = 0.05;
     r.fire = 0;
     r.stunned = false;
-    r.tuck = 0.5;
+    r.armPose = 'tuck';
+    r.legPose = 'trail';
     r.undulate = 0.6;
     this.setWings({ hz: 0.7, amp: 0.5, fold: 0, raise: 0.1, spread: 1 });
     this.look('off');
@@ -594,7 +595,6 @@ export class Dragon implements Boss {
     const cycle = 0.5 + 0.5 * Math.sin(this.t * 0.5);
     this.setWings({ hz, amp: 0.3 + 0.38 * cycle + clamp(this.pitch, 0, 0.5) * 0.4, fold: 0, raise: 0.1, spread: 1 });
     rig.undulate = 0.55 + 0.15 * this.phaseIndex;
-    rig.tuck = 0.55;
     if (this.phaseTrigger) {
       this.phaseTrigger = false;
       this.startAttack('roar');

@@ -71,6 +71,7 @@ function spit(s: Dragon): AttackScript {
         s.rig.jaw = 0.55;
         s.rig.fire = 1;
         s.setWings({ hz: 0.95, amp: 0.55 });
+        s.rig.armPose = 'flex'; s.rig.legPose = 'trail';
         s.host.sfx.flame(W, 0.7);
         s.host.sfx.telegraph();
       },
@@ -95,9 +96,10 @@ function spit(s: Dragon): AttackScript {
         s.host.fx.particles.burst(M, 0xffb040, 14, 7, 0.4, 0.2, 0.3, 2, 2);
         s.host.fx.burstLight(M, 0xff8030, 90, 0.2);
         s.rig.jaw = 1;
+        s.rig.armPose = 'rake';
       },
     });
-    steps.push({ at: W + i * C.gap + 0.14, fn: () => (s.rig.jaw = 0.55) });
+    steps.push({ at: W + i * C.gap + 0.14, fn: () => { s.rig.jaw = 0.55; s.rig.armPose = 'flex'; } });
   }
   const last = W + (n - 1) * C.gap;
   steps.push({
@@ -105,6 +107,7 @@ function spit(s: Dragon): AttackScript {
     fn: () => {
       s.rig.fire = 0;
       s.rig.jaw = 0.1;
+      s.rig.armPose = 'tuck'; s.rig.legPose = 'trail';
       s.look('off');
     },
   });
@@ -154,6 +157,7 @@ function strafe(s: Dragon): AttackScript {
         s.rig.jaw = 0.4;
         s.rig.fire = 0.6;
         s.setWings({ hz: 1.1, amp: 0.7, fold: 0 });
+        s.rig.armPose = 'tuck'; s.rig.legPose = 'trail';
         s.fly([new V3(A.x - ux * 8, 16, A.z - uz * 8), new V3(A.x + ux * 10, 13, A.z + uz * 10)], tell * 0.98, 'io');
         void B;
       },
@@ -166,7 +170,7 @@ function strafe(s: Dragon): AttackScript {
         s.rig.jaw = 1;
         s.rig.fire = 1;
         s.setWings({ fold: 0.4, hz: 1.5, amp: 0.3 });
-        s.rig.tuck = 0.9;
+        s.rig.armPose = 'tuck'; s.rig.legPose = 'trail';
         s.startJet(C.burnLife);
         s.host.sfx.flame(runDur, 1);
         s.host.shake(0.5, 0.3);
@@ -219,6 +223,7 @@ function swoop(s: Dragon): AttackScript {
         s.look('player');
         s.rig.jaw = 0.5;
         s.setWings({ hz: 1.2, amp: 0.7, fold: 0 });
+        s.rig.armPose = 'reach'; s.rig.legPose = 'trail';
         s.fly([new V3(A.x - ux * 10, 15, A.z - uz * 10), new V3(A.x + ux * 6, 10, A.z + uz * 6)], tell * 0.98, 'io');
       },
     });
@@ -230,7 +235,7 @@ function swoop(s: Dragon): AttackScript {
         s.strikeOn = true;
         s.look('off');
         s.rig.jaw = 1;
-        s.rig.tuck = 1;
+        s.rig.armPose = 'rake'; s.rig.legPose = 'dive';
         s.setWings({ fold: 0.95, hz: 0.1, amp: 0.1 });
         s.host.sfx.leap();
         s.host.shake(0.6, 0.4);
@@ -272,6 +277,7 @@ function meteor(s: Dragon): AttackScript {
         s.rig.jaw = 0.9;
         s.rig.fire = 0.8;
         s.setWings({ hz: 1.0, amp: 0.75, raise: 0.4 });
+        s.rig.armPose = 'roar'; s.rig.legPose = 'roar';
         s.cruiseOverride = { alt: 37, radius: 9 };
         s.fly([new V3(s.p.x * 0.4, 34, s.p.z * 0.4), new V3(0, 38, 0)], 2.0, 'io');
         s.host.sfx.roar();
@@ -347,6 +353,7 @@ function crash(s: Dragon): AttackScript {
       s.look('player');
       s.rig.jaw = 0.8;
       s.setWings({ hz: 1.3, amp: 0.85, raise: 0.3 });
+      s.rig.armPose = 'flex'; s.rig.legPose = 'trail';
       s.host.sfx.roar();
       s.host.skyPulse?.(0.7);
       s.fly([hi], 1.0, 'io', () => s.hoverAt(hi, 4, Math.atan2(dir.x, dir.z), 0.12));
@@ -369,7 +376,7 @@ function crash(s: Dragon): AttackScript {
       dir.set(T.x - s.p.x, 0, T.z - s.p.z).normalize();
       s.look('off');
       s.rig.jaw = 1;
-      s.rig.tuck = 1;
+      s.rig.armPose = 'reach'; s.rig.legPose = 'dive';
       s.setWings({ fold: 1, hz: 0.05, amp: 0, raise: -0.2 });
       s.strikeOn = true;
       const mid = new V3((s.p.x + T.x) * 0.5, (s.p.y + 1.4) * 0.42, (s.p.z + T.z) * 0.5);
@@ -397,7 +404,7 @@ function crash(s: Dragon): AttackScript {
     // 땅에 박힌 채 미끄러지고, 몸통이 쏟아져 내려 눕는다
     rig.lieDown();
     rig.stunned = true;
-    rig.tuck = 0.2;
+    rig.armPose = 'brace'; rig.legPose = 'brace';
     s.exposedOn(true);
     s.fly([new V3(T.x + dir.x * 10, 1.4, T.z + dir.z * 10)], 0.85, 'out', () => {
       s.strikeOn = false;
@@ -425,6 +432,7 @@ function crash(s: Dragon): AttackScript {
       rig.liftOff();
       rig.jaw = 0.8;
       s.setWings({ hz: 1.5, amp: 1.0, fold: 0, raise: 0.25 });
+      rig.armPose = 'roar'; rig.legPose = 'roar';
       host.sfx.roar();
       host.sfx.wingbeat(1.5);
       host.shake(1.0, 0.3);
@@ -438,7 +446,7 @@ function crash(s: Dragon): AttackScript {
       s.fly([new V3(s.p.x + dir.x * 3, 8, s.p.z + dir.z * 3), out], 1.7, 'in');
     },
   });
-  steps.push({ at: riseAt + 1.6, fn: () => (s.rig.jaw = 0.1) });
+  steps.push({ at: riseAt + 1.6, fn: () => { s.rig.jaw = 0.1; s.rig.armPose = 'tuck'; s.rig.legPose = 'trail'; } });
   return { steps, end: riseAt + 1.9 };
 }
 
@@ -462,6 +470,7 @@ function sunray(s: Dragon): AttackScript {
         s.look('player');
         s.rig.jaw = 0.5;
         s.setWings({ hz: 0.8, amp: 0.5, raise: 0.5, spread: 1 });
+        s.rig.armPose = 'gather'; s.rig.legPose = 'roar';
         s.host.sfx.telegraph();
         s.host.skyPulse?.(0.5);
         s.fly([station], t1, 'io', () => s.hoverAt(station, 3, null, 0.22));
@@ -509,6 +518,7 @@ function sunray(s: Dragon): AttackScript {
         s.rig.jaw = 0.1;
         s.look('off');
         s.setWings({ hz: 0.9, amp: 0.6, raise: 0.15 });
+        s.rig.armPose = 'tuck'; s.rig.legPose = 'trail';
         s.host.shake(0.8, 0.2);
       },
     },
@@ -531,6 +541,7 @@ function gale(s: Dragon): AttackScript {
         s.look('player');
         s.rig.jaw = 0.4;
         s.setWings({ hz: 1.2, amp: 0.7, raise: 0.5 });
+        s.rig.armPose = 'flex'; s.rig.legPose = 'trail';
         s.fly([new V3(s.p.x * 0.3, 15, s.p.z * 0.3), hoverPt], 1.5, 'io', () => s.hoverAt(hoverPt, 3.5, null, 0.12));
         s.host.sfx.roar();
         s.host.skyPulse?.(0.7);
@@ -545,15 +556,17 @@ function gale(s: Dragon): AttackScript {
       at: tb - C.tell,
       fn: () => {
         s.setWings({ hz: 0.2, amp: 0, raise: 1.05, spread: 1 });
+        s.rig.armPose = 'roar'; s.rig.legPose = 'roar';
         s.host.sfx.telegraph();
         s.host.fx.telegraphs.circle(0, 0, C.radius, C.tell, () => slam(last));
       },
     });
-    steps.push({ at: tb + 0.45, fn: () => s.setWings({ hz: 0.9, amp: 0.4, raise: 0.4 }) });
+    steps.push({ at: tb + 0.45, fn: () => { s.setWings({ hz: 0.9, amp: 0.4, raise: 0.4 }); s.rig.armPose = 'flex'; s.rig.legPose = 'trail'; } });
   }
   const slam = (finale: boolean) => {
     const { host, field } = s;
     s.setWings({ hz: 0, amp: 0, raise: -0.65, spread: 1 });
+    s.rig.armPose = 'brace'; s.rig.legPose = 'brace';
     field.explode(0, 0, C.radius, true);
     field.wave(0, 0, WORLD.radius + 8, C.speed, C.width);
     if (finale) field.wave(0, 0, WORLD.radius + 8, C.speed * 1.2, C.width, 0.32);
@@ -577,6 +590,7 @@ function gale(s: Dragon): AttackScript {
       s.rig.jaw = 0.1;
       s.look('off');
       s.setWings({ hz: 1.0, amp: 0.6, raise: 0.15 });
+      s.rig.armPose = 'tuck'; s.rig.legPose = 'trail';
     },
   });
   return { steps, end: tEnd + 2.0 };
@@ -599,6 +613,7 @@ function roar(s: Dragon): AttackScript {
           s.rig.jaw = 1;
           s.rig.fire = 0.7;
           s.setWings({ hz: 0.5, amp: 0.25, raise: 0.9, spread: 1 });
+          s.rig.armPose = 'roar'; s.rig.legPose = 'roar';
           s.fly([new V3(s.p.x * 0.5, 22, s.p.z * 0.5), hold], 1.1, 'io', () => s.hoverAt(hold, 3, null, 0.45));
           s.host.sfx.roar();
           s.host.flash(s.phaseIndex >= 2 ? '#4a0008' : '#ff3a1a', 0.55, 1.1);
@@ -658,6 +673,7 @@ function roar(s: Dragon): AttackScript {
           s.rig.fire = 0;
           s.look('off');
           s.setWings({ hz: 0.9, amp: 0.55, raise: 0.1 });
+          s.rig.armPose = 'tuck'; s.rig.legPose = 'trail';
         },
       },
     ],
