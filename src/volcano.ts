@@ -17,9 +17,9 @@ export const VOLC = {
   fogDensity: 0.0034,
   hemiSky: 0xcfe6ff,
   hemiGround: 0xb8c4d6,
-  hemiIntensity: 1.25,
+  hemiIntensity: 0.95,
   sun: 0xfff0d2,
-  sunIntensity: 2.3,
+  sunIntensity: 2.0,
   sunPos: [-26, 48, 18] as [number, number, number],
 };
 
@@ -153,7 +153,7 @@ function makeAltar(rand: () => number) {
   const glow = canvas(S);
   const g = base.g;
   const e = glow.g;
-  g.fillStyle = '#b9b2a2';
+  g.fillStyle = '#a49c8a';
   g.fillRect(0, 0, S, S);
   e.fillStyle = '#000';
   e.fillRect(0, 0, S, S);
@@ -166,7 +166,7 @@ function makeAltar(rand: () => number) {
     for (let i = 0; i < n; i++) {
       const a0 = (i / n) * TAU + b * 0.2;
       const a1 = ((i + 1) / n) * TAU + b * 0.2;
-      const sh = 196 + Math.floor(rand() * 38);
+      const sh = 168 + Math.floor(rand() * 34);
       g.fillStyle = `rgb(${sh},${sh - 4},${sh - 14})`;
       g.beginPath();
       g.arc(c, c, r1, a0 + 0.012, a1 - 0.012);
@@ -309,7 +309,7 @@ export class Volcano {
     /* 제단: 계단 세 단 위의 대리석 바닥 */
     const marble = new THREE.MeshStandardMaterial({ color: 0xe8e1d2, roughness: 0.75, metalness: 0.02, flatShading: true });
     const alt = makeAltar(rand);
-    this.altarMat = new THREE.MeshStandardMaterial({ map: alt.map, emissiveMap: alt.glow, emissive: 0xffc860, emissiveIntensity: 0.5, roughness: 0.6, metalness: 0.08 });
+    this.altarMat = new THREE.MeshStandardMaterial({ map: alt.map, emissiveMap: alt.glow, emissive: 0xffc860, emissiveIntensity: 0.3, roughness: 0.6, metalness: 0.08 });
     const floor = new THREE.Mesh(new THREE.CircleGeometry(R, 96).rotateX(-Math.PI / 2), this.altarMat);
     floor.receiveShadow = true;
     root.add(floor);
@@ -333,37 +333,37 @@ export class Volcano {
     const colGeo = new THREE.CylinderGeometry(1, 1.12, 1, 14, 1).translate(0, 0.5, 0);
     const capGeo = new THREE.BoxGeometry(1, 1, 1);
     const NC = 14;
-    const RC = R + 18;
+    const RC = 118; // 용이 선회하는 범위(≈50) 밖 — 몸통이 기둥을 뚫지 않게 멀리
     const cols = new THREE.InstancedMesh(colGeo, marble, NC * 3);
     const caps = new THREE.InstancedMesh(capGeo, marble, NC * 3);
     const o = new THREE.Object3D();
     let ci = 0;
     const heights: number[] = [];
-    for (let i = 0; i < NC; i++) heights.push(i % 5 === 3 ? 10 + rand() * 14 : 36);
+    for (let i = 0; i < NC; i++) heights.push(i % 5 === 3 ? 20 + rand() * 20 : 60);
     for (let i = 0; i < NC; i++) {
       const a = (i / NC) * TAU;
       const h = heights[i];
       o.position.set(Math.cos(a) * RC, LAVA_Y - 6, Math.sin(a) * RC);
       o.rotation.set(0, 0, 0);
-      o.scale.set(2.6, h + 6, 2.6);
+      o.scale.set(5.5, h + 6, 5.5);
       o.updateMatrix();
-      cols.setMatrixAt(ci, o.matrix);
+      cols.setMatrixAt(i, o.matrix);
       // 기둥머리
       o.position.y = h + LAVA_Y;
-      o.scale.set(6.4, 1.6, 6.4);
+      o.scale.set(13, 3, 13);
       o.updateMatrix();
       caps.setMatrixAt(ci, o.matrix);
       ci++;
       // 들보: 이웃 기둥도 온전하면 이어준다
       const j = (i + 1) % NC;
-      if (h >= 36 && heights[j] >= 36) {
+      if (h >= 60 && heights[j] >= 60) {
         const a2 = (j / NC) * TAU;
         const mx = (Math.cos(a) + Math.cos(a2)) * 0.5 * RC;
         const mz = (Math.sin(a) + Math.sin(a2)) * 0.5 * RC;
         const len = Math.hypot(Math.cos(a2) - Math.cos(a), Math.sin(a2) - Math.sin(a)) * RC;
-        o.position.set(mx, 36 + LAVA_Y + 1.6, mz);
+        o.position.set(mx, 60 + LAVA_Y + 3, mz);
         o.rotation.set(0, -Math.atan2(Math.sin(a2) - Math.sin(a), Math.cos(a2) - Math.cos(a)), 0);
-        o.scale.set(len, 2.6, 4.2);
+        o.scale.set(len, 5, 9);
         o.updateMatrix();
         caps.setMatrixAt(ci, o.matrix);
         ci++;
@@ -377,10 +377,10 @@ export class Volcano {
     const stumps = new THREE.InstancedMesh(colGeo, marble, 60);
     for (let i = 0; i < 60; i++) {
       const a = rand() * TAU;
-      const d = R + 40 + Math.pow(rand(), 0.8) * 110;
-      const h = 14 + rand() * 46;
+      const d = 135 + Math.pow(rand(), 0.8) * 150;
+      const h = 20 + rand() * 70;
       o.position.set(Math.cos(a) * d, LAVA_Y - 4, Math.sin(a) * d);
-      o.scale.set(2.2 + rand() * 2.6, h, 2.2 + rand() * 2.6);
+      o.scale.set(4 + rand() * 4, h, 4 + rand() * 4);
       o.rotation.set((rand() - 0.5) * 0.12, rand() * TAU, (rand() - 0.5) * 0.12);
       o.updateMatrix();
       stumps.setMatrixAt(i, o.matrix);
@@ -392,10 +392,10 @@ export class Volcano {
     for (let i = 0; i < 16; i++) {
       const m = new THREE.Mesh(rockGeo, marble);
       const a = rand() * TAU;
-      const d = R + 26 + rand() * 50;
-      const sc = 1.5 + rand() * 4.5;
+      const d = 85 + rand() * 90;
+      const sc = 3 + rand() * 8;
       m.scale.set(sc, sc * (0.6 + rand() * 0.5), sc);
-      m.position.set(Math.cos(a) * d, 4 + rand() * 24, Math.sin(a) * d);
+      m.position.set(Math.cos(a) * d, 4 + rand() * 40, Math.sin(a) * d);
       root.add(m);
       this.rocks.push({ m, y0: m.position.y, ph: rand() * TAU, spin: (rand() - 0.5) * 0.3 });
     }
@@ -449,10 +449,10 @@ export class Volcano {
     /* 가장자리 용암빛 점광원 (플레이어·용을 붉게 물들인다) */
     for (let i = 0; i < 5; i++) {
       const a = (i / 5) * TAU + 0.3;
-      const l = new THREE.PointLight(0xffd9a0, 30, 34, 1.5);
+      const l = new THREE.PointLight(0xffd9a0, 6, 30, 1.5);
       l.position.set(Math.cos(a) * (R - 1.5), 1.2, Math.sin(a) * (R - 1.5));
       root.add(l);
-      this.lights.push({ l, base: 30, ph: rand() * TAU });
+      this.lights.push({ l, base: 6, ph: rand() * TAU });
     }
   }
 
@@ -472,7 +472,7 @@ export class Volcano {
     }
     this.flare = Math.max(0, this.flare - dt * 0.9);
     const pulse = 0.5 + 0.5 * Math.sin(t * 1.3);
-    this.altarMat.emissiveIntensity = 0.4 + 0.15 * pulse + this.flare * 0.5;
+    this.altarMat.emissiveIntensity = 0.28 + 0.1 * pulse + this.flare * 0.5;
     this.rimMat.color.setRGB(1, 0.8, 0.35).multiplyScalar(1.1 + 0.4 * pulse);
     this.lavaMat.color.setRGB(1 + this.flare * 0.15, 1 + this.flare * 0.12, 1);
     for (const li of this.lights) {
@@ -487,7 +487,7 @@ export class Volcano {
     this.sky.position.set(fx, 0, fz);
     this.sky.rotation.y += dt * 0.004;
     for (const sp of [this.sunDisc, this.sunGlow]) sp.position.set(fx + this.sunDir.x * 430, this.sunDir.y * 430, fz + this.sunDir.z * 430);
-    (this.sunGlow.material as THREE.SpriteMaterial).opacity = 0.9 + this.flare * 0.1;
+    (this.sunGlow.material as THREE.SpriteMaterial).opacity = 0.55 + this.flare * 0.15;
 
     const a = this.embers.geometry.getAttribute('position') as THREE.BufferAttribute;
     for (let i = 0; i < a.count; i++) {
