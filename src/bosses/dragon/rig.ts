@@ -35,7 +35,7 @@ const at = (u: number) => Math.round(u * (NR - 1));
 const IW = at(0.18);
 const IH = at(0.434);
 const IFL = at(0.229);
-const IHL = at(0.40); // 뒷다리를 더 앞쪽(머리 쪽)에 단다
+const IHL = at(0.37); // 뒷다리를 더 앞쪽(머리 쪽)에 단다
 /** 날개 배율 (이전의 약 4배) */
 const WS = 3.8;
 const ARM = [4.8, 6.6];
@@ -62,16 +62,19 @@ function radiusAt(s: number) {
   return r * RS;
 }
 const RAD = new Float32Array(NR);
-/** 앞다리 ~ 뒷다리 구간의 몸통을 더 굵고 넓게 (0~1). 앞은 앞다리 직전부터 올라가고, 뒷다리 마디에서 원래 굵기(꼬리)로 돌아온다 */
+/** 앞다리 ~ 뒷다리 구간(양 끝 포함)은 굵기가 일정하게 크고 넓다(BULK=1). 그 바깥(목 쪽 · 꼬리 쪽)은 점점 원래 굵기로 줄어든다 */
 const BULK = new Float32Array(NR);
+const FADE_NECK = 28; // 앞다리 앞쪽에서 줄어드는 마디 수
+const FADE_TAIL = 40; // 뒷다리 뒤쪽에서 줄어드는 마디 수
 for (let i = 0; i < NR; i++) {
-  const up = smooth((i - (IFL - 10)) / 10);
-  const down = 1 - smooth((i - (IHL - 12)) / 12);
+  const up = i >= IFL ? 1 : smooth((i - (IFL - FADE_NECK)) / FADE_NECK);
+  const down = i <= IHL ? 1 : 1 - smooth((i - IHL) / FADE_TAIL);
   BULK[i] = Math.min(up, down);
 }
-const THICK = 0.3; // 두께(반지름) 증가
-const WIDER = 0.2; // 옆으로 추가로 넓어지는 정도
-for (let i = 0; i < NR; i++) RAD[i] = radiusAt(i * DS) * (1 + THICK * BULK[i]);
+const THICK = 0.45; // 두께(반지름) 증가
+const WIDER = 0.35; // 옆으로 추가로 넓어지는 정도
+const R_BULK = radiusAt(IFL * DS) * (1 + THICK); // 일정 구간의 굵기
+for (let i = 0; i < NR; i++) RAD[i] = radiusAt(i * DS) * (1 - BULK[i]) + R_BULK * BULK[i];
 
 /* ───────────────────────── 텍스처 ───────────────────────── */
 function canvas2d(w: number, h = w) {
