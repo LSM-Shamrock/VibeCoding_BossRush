@@ -1090,6 +1090,10 @@ export class DragonRig {
     const f = this.curFire;
     this.mouthGlow.visible = f > 0.02;
     this.mouthGlow.scale.setScalar(0.4 + f * 2.4 * (0.92 + 0.08 * Math.sin(this.t * 40)));
+    // 구가 윗입에 붙지 않도록 구의 반지름만큼 내려 입 한가운데에 둔다 (구 지름 0.5 × scale)
+    const gr = 0.5 * this.mouthGlow.scale.x;
+    this.mouthGlow.position.y = -0.1 - gr;
+    this.mouthLight.position.y = -0.3 - gr * 0.8;
     this.mouthLight.intensity = 220 * f;
     // 수염
     for (let i = 0; i < this.whiskers.length; i++) {

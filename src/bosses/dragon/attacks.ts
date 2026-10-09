@@ -193,7 +193,7 @@ function strafe(s: Dragon): AttackScript {
 }
 
 /* ───────────────────────── 저공 돌진 ─────────────────────────
- * 굵은 붉은 띠 → 용이 날개를 접고 땅에 닿을 듯 날아온다. 머리와 길게 끌리는 몸통이 띠를 쓸고 지나간다.
+ * 굵은 붉은 띠 → 용이 날개를 접고 플레이어가 겨우 닿을 높이(머리 중심 약 4.6)로 날아온다. 머리와 길게 끌리는 몸통이 띠를 쓸고 지나간다.
  */
 function swoop(s: Dragon): AttackScript {
   const ph = s.phaseIndex;
@@ -224,7 +224,7 @@ function swoop(s: Dragon): AttackScript {
         s.rig.jaw = 0.5;
         s.setWings({ hz: 1.2, amp: 0.7, fold: 0 });
         s.rig.armPose = 'reach'; s.rig.legPose = 'trail';
-        s.fly([new V3(A.x - ux * 10, 15, A.z - uz * 10), new V3(A.x + ux * 6, 10, A.z + uz * 6)], tell * 0.98, 'io');
+        s.fly([new V3(A.x - ux * 10, 16, A.z - uz * 10), new V3(A.x + ux * 6, 12, A.z + uz * 6)], tell * 0.98, 'io');
       },
     });
     steps.push({
@@ -240,7 +240,7 @@ function swoop(s: Dragon): AttackScript {
         s.host.sfx.leap();
         s.host.shake(0.6, 0.4);
         s.fly(
-          [new V3(A.x + ux * 24, 4.6, A.z + uz * 24), new V3(A.x + ux * 38, 2.6, A.z + uz * 38), new V3(B.x - ux * 18, 2.6, B.z - uz * 18), new V3(B.x + ux * 4, 6, B.z + uz * 4), new V3(B.x + ux * 24, 17, B.z + uz * 24)],
+          [new V3(A.x + ux * 24, 8, A.z + uz * 24), new V3(A.x + ux * 38, 4.6, A.z + uz * 38), new V3(B.x - ux * 18, 4.6, B.z - uz * 18), new V3(B.x + ux * 4, 8.5, B.z + uz * 4), new V3(B.x + ux * 24, 19, B.z + uz * 24)],
           runDur,
           'lin',
           () => {
