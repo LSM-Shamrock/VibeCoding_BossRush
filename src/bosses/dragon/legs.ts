@@ -129,7 +129,7 @@ export class DragonLegs {
       dg.add(cl);
       mk(clawGeo, this.clawMat, cl).scale.set(1.3, 1.3, clawLen);
     };
-    for (let k = -1; k <= 1; k++) claw(k * 2.5, 3.5, k * 0.12, 1.6, 3.6);
+    for (let k = -1; k <= 1; k++) claw(k * 2.5, 3.5, -k * (5 * Math.PI / 180), 1.6, 3.6); // 바깥 발가락을 안쪽으로 5° 모은다
     claw(0, -3.4, Math.PI, 1.2, 3.2);
     g.scale.setScalar(0.75);
     this.group.add(g);
