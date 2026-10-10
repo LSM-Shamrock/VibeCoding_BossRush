@@ -140,7 +140,9 @@ export class Dragon implements Boss, BabyOwner {
     this.rig = new DragonRig(host.scene);
     this.field = new FireField(host, player);
     this.heals = new HealFlames(host, player);
-    this.field.onBurn = (x, z) => this.heals.tryDrop(x, z);
+    this.field.onBurn = (x, z) => {
+      if (this.phaseIndex >= 2) this.heals.tryDrop(x, z); // 광란(3페이즈)에서만 회복 불꽃이 떨어진다
+    };
     host.targets.push(this);
     this.intro(drop);
   }
@@ -186,8 +188,24 @@ export class Dragon implements Boss, BabyOwner {
   mouthPos(out: THREE.Vector3) {
     return this.rig.mouth(out);
   }
-  exposedOn(on: boolean) {
+  /** part: 약점이 드러나는 곳 — 'all' 머리·가슴 모두 / 'chest' 가슴만 (이때 머리는 평소 약점 배율) */
+  exposedOn(on: boolean, part: 'all' | 'chest' = 'all') {
     this.exposed = on;
+    this.exposedPart = on ? part : 'all';
+  }
+  exposedPart: 'all' | 'chest' = 'all';
+  /** 가슴 약점(가슴 보석) 세계 좌표 */
+  chestPos(out: THREE.Vector3) {
+    let n = 0;
+    out.set(0, 0, 0);
+    for (const q of this.rig.parts) {
+      if (q.kind !== 'chest') continue;
+      out.x += q.x;
+      out.y += q.y;
+      out.z += q.z;
+      n++;
+    }
+    return n ? out.multiplyScalar(1 / n) : out.copy(this.p);
   }
 
   /* ───────────────────────── 날개 · 시선 제어 ───────────────────────── */
@@ -963,25 +981,29 @@ export class Dragon implements Boss, BabyOwner {
   hitArrow(p: THREE.Vector3, r: number, dmg: number): number {
     if (!this.alive) return 0;
     let kind: 'head' | 'body' | 'wing' | null = null;
+    let hitHead = false;
+    let hitChest = false;
     for (const s of this.rig.parts) {
       const dx = p.x - s.x;
       const dy = p.y - s.y;
       const dz = p.z - s.z;
       const rr = s.r + r;
       if (dx * dx + dy * dy + dz * dz < rr * rr) {
-        if (s.kind === 'head' || s.kind === 'chest') {
-          kind = 'head'; // 이마 · 가슴 보석 구간은 같은 약점
-          break;
-        }
-        if (!kind) kind = s.kind;
+        if (s.kind === 'head') hitHead = true;
+        else if (s.kind === 'chest') hitChest = true;
+        else if (!kind) kind = s.kind;
       }
     }
+    if (hitHead || hitChest) kind = 'head'; // 이마 · 가슴 보석 구간은 같은 약점
     if (!kind) return 0;
     if (this.invulnerable) {
       this.blockSfx();
       return BLOCKED;
     }
-    if (kind === 'head') return this.damage(dmg * (this.exposed ? D.exposedMult : D.headMult), this.exposed ? 'exposed' : 'weak', p);
+    if (kind === 'head') {
+      const strong = this.exposed && (this.exposedPart === 'all' || hitChest);
+      return this.damage(dmg * (strong ? D.exposedMult : D.headMult), strong ? 'exposed' : 'weak', p);
+    }
     if (kind === 'wing') return this.damage(dmg * D.wingMult, 'body', p);
     return this.damage(dmg * D.bodyMult, 'body', p);
   }

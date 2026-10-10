@@ -10,8 +10,8 @@ const V3 = THREE.Vector3;
 const D = CFG.dragon;
 const TAU = Math.PI * 2;
 
-export type AttackName = 'spit' | 'strafe' | 'swoop' | 'meteor' | 'crash' | 'sunray' | 'gale' | 'wind' | 'orbit' | 'land' | 'scythe' | 'roar';
-export const SEQUENCE_ATTACKS: AttackName[] = ['spit', 'strafe', 'swoop', 'meteor', 'sunray', 'gale', 'wind', 'orbit', 'land', 'scythe'];
+export type AttackName = 'spit' | 'strafe' | 'swoop' | 'meteor' | 'crash' | 'sunray' | 'gale' | 'wind' | 'orbit' | 'land' | 'scythe' | 'tempest' | 'roar';
+export const SEQUENCE_ATTACKS: AttackName[] = ['spit', 'strafe', 'swoop', 'meteor', 'sunray', 'gale', 'wind', 'orbit', 'land', 'scythe', 'tempest'];
 
 export function buildAttack(name: AttackName, s: Dragon): AttackScript {
   const sc = build(name, s);
@@ -43,6 +43,8 @@ function build(name: AttackName, s: Dragon): AttackScript {
       return land(s);
     case 'scythe':
       return scythe(s);
+    case 'tempest':
+      return tempest(s);
     case 'roar':
       return roar(s);
   }
@@ -655,9 +657,9 @@ function gale(s: Dragon): AttackScript {
     s.setWings({ hz: 0, amp: 0, raise: -0.65, spread: 1 });
     s.rig.armPose = 'brace'; s.rig.legPose = 'brace';
     field.explode(0, 0, C.radius, true);
-    field.wave(0, 0, WORLD.radius + 8, C.speed, C.width);
-    field.wave(0, 0, WORLD.radius + 8, C.speed, C.width * 0.8, C.second);
-    if (finale) field.wave(0, 0, WORLD.radius + 8, C.speed, C.width, C.third);
+    field.wave(0, 0, C.reach, C.speed, C.width);
+    field.wave(0, 0, C.reach, C.speed, C.width * 0.8, C.second);
+    if (finale) field.wave(0, 0, C.reach, C.speed, C.width, C.third);
     host.shake(1.6, 0.35);
     host.sfx.wingbeat(1.8);
     host.sfx.land();
@@ -726,6 +728,97 @@ function makeTornado(scene: THREE.Scene) {
   };
 }
 
+/** 회오리 발사기: 가슴에서 쏘아 올려 조준한 자리에 내려앉고, 내려앉은 뒤에는 같은 방향으로 굴러간다 */
+function tornadoRunner(s: Dragon, ph: number) {
+  const C = D.wind;
+  interface Tor { t: ReturnType<typeof makeTornado>; x: number; z: number; y: number; y0: number; sx: number; sz: number; lx: number; lz: number; fall: number; dx: number; dz: number; d: number; age: number; spin: number; landed: boolean }
+  const tors: Tor[] = [];
+  const P = new V3();
+  const O = new V3();
+  const SZ = C.size;
+  const launch = (cnt: number, spreadK = 1) => {
+    const tgt = ahead(s, 0.8);
+    s.chestPos(O);
+    for (let k = 0; k < cnt; k++) {
+      // 조준 지점(플레이어 쪽)을 중심으로 부채꼴로 흩어진 자리에 내려앉는다
+      const off = (k - (cnt - 1) / 2) * C.spread * spreadK;
+      const px = -(tgt.z - O.z);
+      const pz = tgt.x - O.x;
+      const pl = Math.hypot(px, pz) || 1;
+      const land = inArena(new V3(tgt.x + (px / pl) * off, 0, tgt.z + (pz / pl) * off), 2.0);
+      const dd = Math.hypot(land.x - O.x, land.z - O.z);
+      const fall = Math.max(C.fall, dd / C.flightSpeed);
+      const dir = Math.atan2(land.z - O.z, land.x - O.x);
+      const q: Tor = { t: makeTornado(s.host.scene), x: O.x, z: O.z, y: O.y, y0: O.y, sx: O.x, sz: O.z, lx: land.x, lz: land.z, fall, dx: Math.cos(dir), dz: Math.sin(dir), d: 0, age: 0, spin: Math.random() * TAU, landed: false };
+      q.t.g.position.set(q.x, q.y, q.z);
+      tors.push(q);
+      s.host.fx.telegraphs.circle(land.x, land.z, C.radius * 0.9, fall, () => {});
+      s.host.fx.particles.burst(O, 0xdfe9ff, 26, 14, 0.7, 0.2, 0.3, 0, 1.6);
+      s.host.fx.burstLight(O, 0xcfe0ff, 260, 0.4);
+    }
+    s.host.sfx.wingbeat(2);
+    s.host.sfx.land();
+    s.host.shake(0.9, 0.3);
+    s.host.skyPulse?.(0.5);
+  };
+  const tick = (dt: number) => {
+    const pl = s.player;
+    const sp = C.speed[ph];
+    for (let i = tors.length - 1; i >= 0; i--) {
+      const q = tors[i];
+      q.age += dt;
+      q.spin += dt * 9;
+      const u = Math.min(1, q.age / q.fall);
+      if (u < 1) {
+        // 가슴에서 떠올라 조준 자리로 내리꽂힌다
+        q.x = q.sx + (q.lx - q.sx) * u;
+        q.z = q.sz + (q.lz - q.sz) * u;
+        q.y = q.y0 * (1 - u) ** 1.5;
+      } else {
+        if (!q.landed) {
+          q.landed = true;
+          s.host.shake(0.7, 0.25);
+          s.host.fx.ring(q.x, q.z, 7 * SZ, 0.5, 0xdfe9ff);
+        }
+        q.y = 0;
+        q.x += q.dx * sp * dt;
+        q.z += q.dz * sp * dt;
+        q.d += sp * dt;
+      }
+      const grow = Math.min(1, 0.35 + q.age / 0.7) * SZ;
+      q.t.g.position.set(q.x, q.y, q.z);
+      q.t.g.scale.set(grow, (0.55 + 0.45 * Math.min(1, grow / SZ)) * SZ, grow);
+      for (let k = 0; k < q.t.layers.length; k++) {
+        q.t.layers[k].rotation.y = q.spin * (1 + k * 0.18);
+        q.t.layers[k].position.x = Math.sin(q.spin * 0.6 + k * 0.7) * 0.25 * k * 0.3;
+      }
+      for (let m = 0; m < 3; m++) {
+        const a = Math.random() * TAU;
+        const h = Math.random() * 7 * SZ;
+        const r = (0.9 + (h / SZ) * 0.5) * grow;
+        P.set(q.x + Math.cos(a) * r, q.y + 0.3 + h, q.z + Math.sin(a) * r);
+        s.host.fx.particles.burst(P, Math.random() < 0.5 ? 0xdfe9ff : 0x9a8a78, 1, 2, 0.4, 0.14, 0.1, 0, 1.4);
+      }
+      if (!pl.dead && q.landed) {
+        const rx = pl.pos.x - q.x;
+        const rz = pl.pos.z - q.z;
+        const dist = Math.hypot(rx, rz);
+        if (dist < C.radius * (grow / SZ) + pl.hitRadius && pl.pos.y < 6) pl.takeDamage(q.x, q.z);
+        if (dist < C.pull && dist > 0.5) pl.push(pl.pos.x + rx, pl.pos.z + rz, 38 * dt);
+      }
+      if (q.d > C.reach || Math.hypot(q.x, q.z) > WORLD.radius + 16) {
+        q.t.dispose();
+        tors.splice(i, 1);
+      }
+    }
+  };
+  const dispose = () => {
+    for (const q of tors) q.t.dispose();
+    tors.length = 0;
+  };
+  return { launch, tick, dispose, get busy() { return tors.length > 0; } };
+}
+
 function wind(s: Dragon): AttackScript {
   const ph = s.phaseIndex;
   const C = D.wind;
@@ -735,40 +828,14 @@ function wind(s: Dragon): AttackScript {
   const face = Math.atan2(-Math.cos(a0), -Math.sin(a0));
   const per = 1 / C.hz; // 날갯짓 한 번의 길이
   const tStart = 2.8; // 날갯짓 시작
-  interface Tor { t: ReturnType<typeof makeTornado>; x: number; z: number; y: number; y0: number; dx: number; dz: number; d: number; age: number; spin: number }
-  const tors: Tor[] = [];
+  const run = tornadoRunner(s, ph);
   let tt = 0;
   let prevF = -1;
   let flaps = 0;
-  const P = new V3();
-  const tipA = new V3();
   s.onEnd(() => {
-    for (const q of tors) q.t.dispose();
-    tors.length = 0;
+    run.dispose();
     s.rig.wingSwing = false;
   });
-  // 날개를 앞으로 휘두르는 순간, 날개 끝에서 회오리가 뿜어져 나와 땅으로 내려꽂힌다
-  const launch = () => {
-    const tgt = ahead(s, 0.8);
-    const cnt = C.count[ph];
-    for (let k = 0; k < cnt; k++) {
-      const tip = s.rig.wingTips[k % 2];
-      tipA.copy(tip);
-      if (cnt === 3 && k === 2) tipA.copy(s.rig.wingTips[0]).add(s.rig.wingTips[1]).multiplyScalar(0.5);
-      const base = Math.atan2(tgt.z - tipA.z, tgt.x - tipA.x);
-      const ang = base + (k - (cnt - 1) / 2) * C.fan;
-      const y0 = Math.min(tipA.y, 70);
-      const q: Tor = { t: makeTornado(s.host.scene), x: tipA.x, z: tipA.z, y: y0, y0, dx: Math.cos(ang), dz: Math.sin(ang), d: 0, age: 0, spin: Math.random() * TAU };
-      q.t.g.position.set(q.x, q.y, q.z);
-      tors.push(q);
-      s.host.fx.particles.burst(tipA, 0xdfe9ff, 26, 14, 0.7, 0.2, 0.3, 0, 1.6);
-      s.host.fx.burstLight(tipA, 0xcfe0ff, 220, 0.4);
-    }
-    s.host.sfx.wingbeat(2);
-    s.host.sfx.land();
-    s.host.shake(0.9, 0.3);
-    s.host.skyPulse?.(0.5);
-  };
   const steps: Step[] = [
     {
       at: 0,
@@ -780,7 +847,7 @@ function wind(s: Dragon): AttackScript {
         // 몸을 세우고 하늘에서 내려온다 (아레나 밖이라 수직 자세가 된다)
         s.fly([new V3(hoverPt.x * 1.1, hoverPt.y + 30, hoverPt.z * 1.1), hoverPt], 2.4, 'io', () => s.hoverAt(hoverPt, 3, face, 0));
         s.host.sfx.roar();
-        s.host.banner('폭풍 날갯짓', '날개를 휘두를 때마다 회오리가 쏟아진다 — 떨어지는 곳에서 벗어나라', 2.2);
+        s.host.banner('폭풍 날갯짓', '가슴에서 회오리가 쏘아진다 — 내려앉는 자리에서 벗어나라', 2.2);
         s.host.skyPulse?.(0.7);
       },
     },
@@ -804,52 +871,16 @@ function wind(s: Dragon): AttackScript {
             // 휘두르기가 앞으로 거의 다 뻗는 순간(한 번의 동작의 약 36% 지점)에 맞춰 발사
             if (prevF >= 0 && prevF < 0.36 && f >= 0.36 && flaps < n) {
               flaps++;
-              launch();
+              run.launch(C.count[ph]);
             }
             prevF = f;
           }
-          const pl = s.player;
-          for (let i = tors.length - 1; i >= 0; i--) {
-            const q = tors[i];
-            const sp = C.speed[ph];
-            q.age += dt;
-            q.x += q.dx * sp * dt;
-            q.z += q.dz * sp * dt;
-            q.d += sp * dt;
-            q.spin += dt * 9;
-            // 날개 끝에서 땅까지 내려꽂힌다
-            q.y = q.y0 * Math.max(0, 1 - q.age / C.fall) ** 1.4;
-            const grow = Math.min(1, 0.35 + q.age / 0.7);
-            q.t.g.position.set(q.x, q.y, q.z);
-            q.t.g.scale.set(grow, 0.55 + 0.45 * grow, grow);
-            for (let k = 0; k < q.t.layers.length; k++) {
-              q.t.layers[k].rotation.y = q.spin * (1 + k * 0.18);
-              q.t.layers[k].position.x = Math.sin(q.spin * 0.6 + k * 0.7) * 0.25 * k * 0.3;
-            }
-            for (let m = 0; m < 3; m++) {
-              const a = Math.random() * TAU;
-              const h = Math.random() * 7;
-              const r = (0.9 + h * 0.5) * grow;
-              P.set(q.x + Math.cos(a) * r, q.y + 0.3 + h, q.z + Math.sin(a) * r);
-              s.host.fx.particles.burst(P, Math.random() < 0.5 ? 0xdfe9ff : 0x9a8a78, 1, 2, 0.4, 0.14, 0.1, 0, 1.4);
-            }
-            if (!pl.dead && q.y < 2.5) {
-              const rx = pl.pos.x - q.x;
-              const rz = pl.pos.z - q.z;
-              const dist = Math.hypot(rx, rz);
-              if (dist < C.radius * grow + pl.hitRadius && pl.pos.y < 6) pl.takeDamage(q.x, q.z);
-              if (dist < C.pull && dist > 0.5) pl.push(pl.pos.x + rx, pl.pos.z + rz, 38 * dt);
-            }
-            if (q.d > C.reach || Math.hypot(q.x, q.z) > WORLD.radius + 16) {
-              q.t.dispose();
-              tors.splice(i, 1);
-            }
-          }
+          run.tick(dt);
         });
       },
     },
   ];
-  const tEnd = tStart + n * per + C.reach / C.speed[ph];
+  const tEnd = tStart + n * per + C.reach / C.speed[ph] + 1.2;
   steps.push({
     at: tEnd + 0.3,
     fn: () => {
@@ -861,6 +892,133 @@ function wind(s: Dragon): AttackScript {
     },
   });
   return { steps, end: tEnd + 1.3 };
+}
+
+/* ───────────────────────── 폭풍 기 모으기 (가슴 약점) ─────────────────────────
+ * 폭풍 날갯짓과 같은 수직 자세로 가슴에 기를 모은다. 이때는 머리가 아니라 가슴 보석이 크게 드러난다.
+ * 충분히 때리면 기가 흩어지고, 끝까지 모으면 가슴에서 큰 회오리를 한꺼번에 쏘아 보낸다.
+ */
+function tempest(s: Dragon): AttackScript {
+  const ph = s.phaseIndex;
+  const C = D.tempest;
+  const W = D.wind;
+  const charge = C.charge[ph];
+  const a0 = Math.atan2(s.player.pos.z, s.player.pos.x) + Math.PI + (Math.random() - 0.5) * 0.9;
+  const hoverPt = new V3(Math.cos(a0) * C.dist, C.alt, Math.sin(a0) * C.dist);
+  const face = Math.atan2(-Math.cos(a0), -Math.sin(a0));
+  const run = tornadoRunner(s, ph);
+  const gatherAt = 2.6;
+  const fireAt = gatherAt + charge;
+  let hp0 = 0;
+  let done = false;
+  let broken = false;
+  const script: AttackScript = { steps: [], end: fireAt + 3.6 };
+  const steps = script.steps;
+  s.onEnd(() => {
+    run.dispose();
+    s.exposedOn(false);
+    s.rig.wingSwing = false;
+  });
+  steps.push({
+    at: 0,
+    fn: () => {
+      s.look('player');
+      s.rig.jaw = 0.4;
+      s.setWings({ hz: 1.0, amp: 0.7, raise: 0.4 });
+      s.rig.armPose = 'flex'; s.rig.legPose = 'trail';
+      s.fly([new V3(hoverPt.x * 1.1, hoverPt.y + 26, hoverPt.z * 1.1), hoverPt], 2.2, 'io', () => s.hoverAt(hoverPt, 8, face, 0));
+      s.host.sfx.roar();
+      s.host.skyPulse?.(0.6);
+    },
+  });
+  steps.push({
+    at: gatherAt,
+    fn: () => {
+      const { host, rig } = s;
+      hp0 = s.hp;
+      host.banner('폭풍 기 모으기', '가슴에 기를 모은다 — 가슴 보석을 노려라!', 1.9);
+      s.exposedOn(true, 'chest');
+      rig.armPose = 'gather'; rig.legPose = 'roar';
+      rig.jaw = 0.7;
+      s.setWings({ hz: 0.45, amp: 0.3, fold: 0, raise: 0.95, spread: 1 });
+      host.sfx.sunCharge(charge);
+      host.skyPulse?.(0.8);
+      const C0 = new V3();
+      const fwd = new V3();
+      let tt = 0;
+      let ringT = 0;
+      s.onTick((dt) => {
+        run.tick(dt);
+        if (done) return;
+        tt += dt;
+        const k = clamp(tt / charge, 0, 1);
+        s.chestPos(C0);
+        fwd.set(Math.sin(face), 0, Math.cos(face));
+        C0.addScaledVector(fwd, 3 + 1.5 * k);
+        s.field.charge(C0, k);
+        host.shake(0.05 + 0.2 * k, 0.05);
+        ringT -= dt;
+        if (ringT <= 0) {
+          ringT = 0.42 - 0.22 * k;
+          host.fx.ring(C0.x, C0.z, 9, 0.5, 0xcfe0ff, 0.05);
+        }
+        for (let i = 0; i < 2; i++) {
+          const a = Math.random() * TAU;
+          const r = 6 + Math.random() * 6;
+          const q = new V3(C0.x + Math.cos(a) * r, C0.y + (Math.random() - 0.5) * 10, C0.z + Math.sin(a) * r);
+          host.fx.particles.burst(q, Math.random() < 0.5 ? 0xdfe9ff : 0xffc060, 1, 1.0, 0.5, 0.2, 0.4, 0, 1.6);
+        }
+        if (!broken && s.hp <= hp0 - C.breakDmg) {
+          broken = true;
+          done = true;
+          host.banner('저지!', '모으던 기가 흩어졌다', 1.4);
+          host.sfx.roar();
+          host.hitStop(0.12);
+          host.shake(1.6, 0.3);
+          host.flash('#ffd9a0', 0.4, 0.4);
+          host.fx.burstLight(C0, 0xcfe0ff, 280, 0.8);
+          host.fx.particles.burst(C0, 0xdfe9ff, 60, 12, 0.9, 0.3, 0.6);
+          s.exposedOn(false);
+          s.rig.jaw = 0.3;
+          script.end = 1.8; // 흩어진 뒤 바로 물러난다 (아래 steps 는 broken 이면 건너뜀)
+        }
+      });
+    },
+  });
+  // 기가 차면: 가슴에서 회오리 연발
+  steps.push({
+    at: fireAt,
+    fn: () => {
+      if (broken) return;
+      done = true;
+      s.exposedOn(false);
+      s.rig.jaw = 1;
+      s.host.sfx.roar();
+      s.host.flash('#cfe0ff', 0.4, 0.4);
+      run.launch(C.count[ph], 1.3);
+      s.after(0.7, () => run.launch(C.count[ph], 0.38));
+    },
+  });
+  steps.push({
+    at: fireAt + 1.8,
+    fn: () => {
+      if (broken) return;
+      s.exposedOn(true, 'chest'); // 쏟아낸 뒤 숨을 고르는 짧은 빈틈
+      s.rig.jaw = 0.4;
+    },
+  });
+  steps.push({
+    at: fireAt + 3.0,
+    fn: () => {
+      s.exposedOn(false);
+      s.rig.jaw = 0.1;
+      s.look('off');
+      s.setWings({ hz: 1.0, amp: 0.6, raise: 0.15 });
+      s.rig.armPose = 'tuck'; s.rig.legPose = 'trail';
+    },
+  });
+  void W;
+  return script;
 }
 
 /* ───────────────────────── 선회 사격 ─────────────────────────

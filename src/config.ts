@@ -224,9 +224,9 @@ export const CFG = {
     idle: [1.7, 1.2, 0.85],
 
     sequence: [
-      ['spit', 'strafe', 'wind', 'land', 'swoop', 'orbit', 'spit', 'strafe', 'land', 'swoop'],
-      ['meteor', 'strafe', 'wind', 'orbit', 'spit', 'land', 'swoop', 'meteor', 'scythe', 'strafe', 'land'],
-      ['sunray', 'orbit', 'gale', 'wind', 'strafe', 'scythe', 'meteor', 'sunray', 'swoop', 'land', 'gale', 'scythe', 'wind', 'land'],
+      ['spit', 'strafe', 'wind', 'land', 'swoop', 'orbit', 'tempest', 'spit', 'strafe', 'land', 'swoop'],
+      ['meteor', 'strafe', 'wind', 'orbit', 'spit', 'land', 'swoop', 'meteor', 'tempest', 'scythe', 'strafe', 'land'],
+      ['sunray', 'orbit', 'gale', 'wind', 'strafe', 'scythe', 'meteor', 'sunray', 'swoop', 'land', 'gale', 'scythe', 'wind', 'tempest', 'land'],
     ],
 
     // 화염탄: 입에 불을 모았다가 불덩이를 연달아 던진다. 착지 고리가 차오른다. (페이즈 2~: 바닥에 불이 남는다)
@@ -242,9 +242,11 @@ export const CFG = {
     // 태양 광선 (페이즈 3): 입가에 태양을 모아 쏜다. 광선의 조준점이 플레이어를 끈질기게 쫓는다
     sunray: { charge: 2.3, dur: 4.4, chase: 6.57, radius: 2.16, lock: 1.0 }, // 쫓는 속도 · 판정 범위 0.9배
     // 날개 충격파 (페이즈 3): 제단 위에서 날개를 내리칠 때마다 땅을 훑는 불꽃 고리가 퍼진다
-    gale: { beats: 4, gap: 1.6, tell: 0.95, speed: 11, width: 1.4, radius: 3.8, second: 0.95, third: 1.8 }, // 고리 사이 간격(초) second/third — 점프나 대시로 하나씩 넘는다
+    gale: { beats: 4, gap: 1.8, tell: 0.95, speed: 7, width: 1.2, radius: 3.8, second: 1.1, third: 2.1, reach: 17 }, // 고리 사이 간격(초) second/third — 점프나 대시로 하나씩 넘는다
     // 폭풍 날갯짓: 아레나 밖 하늘에서 몸을 세우고 날개를 크게 휘저어, 내리칠 때마다 굴러오는 회오리를 쏟는다
-    wind: { flaps: [3, 4, 5], count: [1, 2, 3], fan: 0.34, hz: 0.55, fall: 1.1, dist: 46, alt: 92, speed: [14, 16, 18], radius: 2.8, pull: 6.5, reach: 62 },
+    wind: { flaps: [3, 4, 5], count: [1, 2, 3], fan: 0.34, hz: 0.55, fall: 1.1, flightSpeed: 34, spread: 5, size: 1.6, dist: 46, alt: 72, speed: [14, 16, 18], radius: 4.2, pull: 9, reach: 62 },
+    // 폭풍 기 모으기: 폭풍 날갯짓과 같은 자세로 가슴에 기를 모은다 — 이때 가슴 보석이 약점. 충분히 때리면 저지, 끝까지 모으면 회오리 연발
+    tempest: { charge: [4.2, 3.7, 3.3], dist: 50, alt: 62, breakDmg: 70, count: [2, 3, 3] },
     // 선회 사격: 이무기처럼 아레나 가장자리를 낮게 돌며 불덩이를 던진다
     orbit: { revs: [1.1, 1.4, 1.7], speed: [27, 31, 35], radius: 34, alt: 8, interval: [0.8, 0.62, 0.48], flight: 1.0, peak: 6, bomb: 2.6, zone: [0, 3, 4] },
     // 착지: 플레이어 반대편 땅에 내려앉아 엎드린다 (머리 · 가슴 보석 피해 증가) — 불꽃이 하늘의 용에 닿지 않으므로 주 공격 기회
