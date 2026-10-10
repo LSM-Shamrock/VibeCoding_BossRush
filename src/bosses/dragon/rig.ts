@@ -351,6 +351,11 @@ export class DragonRig {
   /* 마디 */
   private P: V3[] = [];
   private Pout: V3[] = [];
+  /** 수직 자세에서 각 마디가 있어야 할 자리 */
+  private Q: V3[] = [];
+  /** true 면 몸을 수직으로 세운다(목 · 몸통 수직, 꼬리는 회오리로 말림, 팔다리는 아래로 늘어짐) */
+  upright = false;
+  private curUp = 0;
   private T: V3[] = [];
   private U: V3[] = [];
   private Rv: V3[] = [];
@@ -396,6 +401,7 @@ export class DragonRig {
     for (let i = 0; i < NR; i++) {
       this.P.push(new V3());
       this.Pout.push(new V3());
+      this.Q.push(new V3());
       this.T.push(new V3(0, 0, 1));
       this.U.push(new V3(0, 1, 0));
       this.Rv.push(new V3(1, 0, 0));
@@ -937,7 +943,13 @@ export class DragonRig {
       const cy = Math.cos(this.pitch);
       const sy = Math.sin(this.pitch);
       U[0].set(-Math.sin(this.yaw) * sy, cy, -Math.cos(this.yaw) * sy);
-      U[0].addScaledVector(T[0], -U[0].dot(T[0])).normalize();
+      U[0].addScaledVector(T[0], -U[0].dot(T[0]));
+      if (U[0].lengthSq() < 1e-6) {
+        // 몸이 수직이면 등은 뒤쪽을 본다
+        U[0].set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
+        U[0].addScaledVector(T[0], -U[0].dot(T[0]));
+      }
+      U[0].normalize();
       for (let i = 1; i < NR; i++) {
         U[i].copy(U[i - 1]);
         U[i].addScaledVector(T[i], -U[i].dot(T[i]));
@@ -993,10 +1005,19 @@ export class DragonRig {
       if (this.collapseT >= 1) this.collapseFrom = null;
     }
 
+    // 수직 자세: 마디를 세워 둔 자리로 (머리 쪽부터 차례로) 옮긴다
+    const upT = this.upright && this.lyingK === 0 && !this.collapseFrom ? 1 : 0;
+    this.curUp = approach(this.curUp, upT, 2.4, dt);
+    if (this.curUp < 0.004) this.curUp = upT === 0 ? 0 : this.curUp;
+    const up = this.curUp > 0.004;
+    if (up) this.applyUpright();
+
     // ── 파도(헤엄치는 일렁임): 꼬리로 갈수록 크다. 쓰러져 있을 때는 몸을 비틀며 숨쉰다 ──
     this.frames(this.P, false);
-    const und = this.curUnd * (1 - 0.8 * this.lyingK);
+    if (up) this.uprightFrames();
+    const und = this.curUnd * (1 - 0.8 * this.lyingK) * (1 - 0.9 * smooth(this.curUp));
     const flapBob = Math.sin(this.flapPh);
+    const upK = smooth(this.curUp);
     for (let i = 0; i < NR; i++) {
       const s = i * DS;
       const ramp = smooth(s / 160);
@@ -1008,18 +1029,19 @@ export class DragonRig {
       po.copy(pi).addScaledVector(this.Rv[i], lat).addScaledVector(this.U[i], ver);
       // 날갯짓에 어깨가 출렁인다
       const sh = Math.exp(-Math.pow((i - IW) / 14, 2));
-      po.y += -flapBob * 2.2 * this.cur.amp * sh * (1 - this.lyingK);
+      po.y += -flapBob * 2.2 * this.cur.amp * sh * (1 - this.lyingK) * (1 - upK);
       // 숨쉬기(가슴)
       const br = 1 + 0.025 * Math.sin(t * 2.4 - s * 0.15);
       void br;
-      po.y = Math.max(po.y, RAD[i] * 0.78 + 0.1);
+      // 수직 자세일 때는 아래가 허공이다 (땅 위 눌림 없음)
+      if (upK < 0.5) po.y = Math.max(po.y, RAD[i] * 0.78 + 0.1);
     }
     this.head.y = Math.max(this.head.y, 1.3);
     // 파도를 얹은 위치로 축을 다시 구한다 (관이 휜 길을 따라가도록)
     this.frames(this.Pout, true);
     // 선회 기울기: 궤적에 실려 온 값으로 몸을 눕힌다
     for (let i = 0; i < NR; i++) {
-      const b = this.Bk[i] * (1 - this.lyingK);
+      const b = this.Bk[i] * (1 - this.lyingK) * (1 - upK);
       if (Math.abs(b) > 1e-3) {
         const c = Math.cos(b);
         const s = Math.sin(b);
@@ -1038,6 +1060,75 @@ export class DragonRig {
     this.updateLimbs(dt);
     this.updateParts();
     this.updateMaterials(t);
+  }
+
+  /** 수직 자세의 마디 위치: 머리 아래로 목 · 몸통이 곧게 늘어지고, 그 아래에서 꼬리가 좁아지는 회오리(나선)로 말린다 */
+  private applyUpright() {
+    const Q = this.Q;
+    const H = this.head;
+    const fx = Math.sin(this.yaw);
+    const fz = Math.cos(this.yaw);
+    // 빠르게 움직일수록 몸이 뒤로 살짝 젖혀진다
+    const lean = 0.05 + clamp(this.speed * 0.0045, 0, 0.22);
+    const sl = Math.sin(lean);
+    const cl = Math.cos(lean);
+    const Lc = IHL * DS; // 머리 ~ 뒷다리: 수직 기둥
+    const Lb = 11; // 기둥 → 나선으로 꺾이는 구간
+    const tailLen = (NR - 1 - IHL) * DS;
+    const R0 = 8.6;
+    const R1 = 2.3;
+    // 기둥
+    for (let i = 0; i <= IHL; i++) {
+      const s = i * DS;
+      const sway = Math.sin(this.t * 0.9 - s * 0.045) * 0.7 * (s / Lc);
+      Q[i].set(H.x - fx * sl * s + fz * sway, H.y - cl * s, H.z - fz * sl * s - fx * sway);
+    }
+    // 꼬리: 방향을 한 칸씩 적분 (수직 아래 → 수평 선회로 서서히 눕고, 반지름은 좁아진다)
+    let x = Q[IHL].x;
+    let y = Q[IHL].y;
+    let z = Q[IHL].z;
+    let phi = Math.atan2(-fz, -fx) + this.t * 0.7;
+    const g0 = Math.PI / 2 - lean;
+    for (let i = IHL + 1; i < NR; i++) {
+      const u = (i - IHL) * DS;
+      const kb = smooth(u / Lb);
+      const kr = Math.pow(clamp((u - Lb) / Math.max(1, tailLen - Lb), 0, 1), 0.85);
+      const r = lerp(R0, R1, kr);
+      // 한 바퀴 돌 때 내려가는 높이 = 위쪽 바퀴와 겹치지 않을 만큼
+      const gc = Math.asin(Math.min(0.7, (2.3 * RAD[i] + 0.7) / (TAU * r)));
+      const g = lerp(g0, gc, kb);
+      const cg = Math.cos(g);
+      phi += (DS * cg) / r;
+      x += Math.cos(phi) * cg * DS;
+      y -= Math.sin(g) * DS;
+      z += Math.sin(phi) * cg * DS;
+      Q[i].set(x, y, z);
+    }
+    // 머리 쪽부터 차례로 섞는다
+    for (let i = 0; i < NR; i++) {
+      const k = smooth(clamp(this.curUp * 1.5 - (i / NR) * 0.5, 0, 1));
+      this.P[i].lerp(Q[i], k);
+    }
+  }
+
+  /** 수직 자세의 축: 몸통은 등이 뒤를 보고, 꼬리 나선에서는 등이 위(바깥)를 본다 */
+  private uprightFrames() {
+    const fx = Math.sin(this.yaw);
+    const fz = Math.cos(this.yaw);
+    for (let i = 0; i < NR; i++) {
+      const k = smooth(clamp(this.curUp * 1.5 - (i / NR) * 0.5, 0, 1));
+      if (k < 0.01) continue;
+      const w = smooth(clamp((i - IHL) / 14, 0, 1)); // 0 = 몸통(등이 뒤) / 1 = 꼬리 나선(등이 위)
+      this.tv.set(-fx * (1 - w), w, -fz * (1 - w));
+      this.tv.addScaledVector(this.T[i], -this.tv.dot(this.T[i]));
+      if (this.tv.lengthSq() < 1e-4) continue;
+      this.tv.normalize();
+      this.U[i].lerp(this.tv, k);
+      this.U[i].addScaledVector(this.T[i], -this.U[i].dot(this.T[i]));
+      if (this.U[i].lengthSq() < 1e-6) this.U[i].copy(this.tv);
+      this.U[i].normalize();
+      this.Rv[i].crossVectors(this.U[i], this.T[i]).normalize();
+    }
   }
 
   private updateBody() {
@@ -1099,7 +1190,9 @@ export class DragonRig {
   private updateHead(dt: number) {
     const r = this.headRoot;
     r.position.copy(this.Pout[0]);
-    this.ev.set(-(this.pitch + this.lookPitch), this.yaw + this.lookYaw, -this.bank * 0.9, 'YXZ');
+    const upK = smooth(this.curUp);
+    // 수직 자세에서는 머리가 몸의 방향(아래)을 따라가지 않고 앞을 본다
+    this.ev.set(-(this.pitch * (1 - 0.85 * upK) + this.lookPitch), this.yaw + this.lookYaw, -this.bank * 0.9 * (1 - upK), 'YXZ');
     r.quaternion.setFromEuler(this.ev);
     const stun = this.curStun;
     // 아래턱: 입을 벌리면 위쪽 숨결, 숨 쉴 때 살짝 떨림
@@ -1359,7 +1452,7 @@ export class DragonRig {
     this.lf.U = this.U[IHL];
     this.lf.T = this.T[IHL];
     this.lf.rad = RAD[IHL];
-    this.legs.update(dt, this.lfA, this.lf, lie);
+    this.legs.update(dt, this.lfA, this.lf, lie, smooth(this.curUp), this.yaw);
   }
   private lfA: { c: V3; R: V3; U: V3; T: V3; rad: number } = { c: new V3(), R: new V3(), U: new V3(), T: new V3(), rad: 1 };
   private lf: { c: V3; R: V3; U: V3; T: V3; rad: number } = { c: new V3(), R: new V3(), U: new V3(), T: new V3(), rad: 1 };

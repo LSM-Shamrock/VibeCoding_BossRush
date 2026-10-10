@@ -99,6 +99,8 @@ export class DragonLegs {
   private pole = new V3();
   private vel = new V3();
   private tmp = new V3();
+  private dfoot = new V3();
+  private dpole = new V3();
 
   constructor(private group: THREE.Group) {
     const upperGeo = new THREE.CylinderGeometry(0.8, 1, 1, 7);
@@ -167,7 +169,7 @@ export class DragonLegs {
   }
 
   /** fore: 앞다리 몸통 프레임, hind: 뒷다리 몸통 프레임. lie: 쓰러져 바닥에 엎드림 */
-  update(dt: number, fore: LegFrame, hind: LegFrame, lie: boolean) {
+  update(dt: number, fore: LegFrame, hind: LegFrame, lie: boolean, dangle = 0, yaw = 0) {
     // 엎드리면 발이 사방으로 퍼진다 (거미의 stagger 와 같은 발상)
     this.stance += ((lie ? 1.4 : 1) - this.stance) * Math.min(1, dt * 6);
 
@@ -237,6 +239,22 @@ export class DragonLegs {
       this.pole.normalize().multiplyScalar(0.45);
       this.pole.y = 1;
 
+      // 공중에서 몸이 수직일 때: 윗다리는 옆으로 뻗고 아랫다리는 아래로 90° 꺾여 늘어진다 (발은 땅이 아니라 허공에 매달림)
+      if (dangle > 0.001) {
+        this.dpole.copy(f.R).multiplyScalar(s);
+        this.dpole.y = 0;
+        if (this.dpole.lengthSq() < 1e-6) this.dpole.set(s, 0, 0);
+        this.dpole.normalize();
+        this.dfoot.copy(hip).addScaledVector(this.dpole, L1 * 0.97);
+        this.dfoot.y -= L2 * 0.97;
+        this.dfoot.x += Math.sin(yaw) * 1.2; // 앞(배 쪽)으로 살짝
+        this.dfoot.z += Math.cos(yaw) * 1.2;
+        this.foot.lerp(this.dfoot, dangle);
+        this.dpole.multiplyScalar(0.45);
+        this.dpole.y = 1;
+        this.pole.lerp(this.dpole, dangle);
+      }
+
       this.hip.copy(hip);
       solveTwoBone(this.hip, this.foot, L1, L2, this.pole, this.knee, this.end);
       placeSegment(this.upper[i], this.hip, this.knee, UP_T);
@@ -251,6 +269,10 @@ export class DragonLegs {
       this.bz.y = 0;
       if (this.bz.lengthSq() < 1e-6) this.bz.set(0, 0, 1);
       this.bz.normalize();
+      if (dangle > 0.001) {
+        // 매달린 발은 몸이 보는 쪽을 향한다
+        this.bz.lerp(this.tmp.set(Math.sin(yaw), 0, Math.cos(yaw)), dangle).normalize();
+      }
       this.bx.set(0, 1, 0).cross(this.bz);
       this.mb.makeBasis(this.bx, this.tmp.set(0, 1, 0), this.bz);
       paw.quaternion.setFromRotationMatrix(this.mb);

@@ -292,8 +292,15 @@ export class Dragon implements Boss {
     r.yaw = this.yaw;
     r.pitch = this.pitch;
     r.bank = this.bank;
+    // 공중에서 빠르게 가로지르지 않고 떠 있을 때(아레나 밖 선회 · 제자리 비행)는 몸을 수직으로 세운다.
+    // 아레나 위에서는 아래가 제단이라 수평 자세를 유지한다 (히스테리시스로 경계에서 떨리지 않게)
+    const dist = Math.hypot(this.p.x, this.p.z);
+    const ok = this.alive && this.dying <= 0 && this.state !== 'enter' && !this.move && !r.lying;
+    this.upOn = ok && dist > (this.upOn ? 32 : 35);
+    r.upright = this.upOn;
     void dt;
   }
+  private upOn = false;
 
   /** 이동: 경로 → 제자리 비행 → (기본) 선회 */
   private integrate(dt: number) {
@@ -435,7 +442,9 @@ export class Dragon implements Boss {
     const gz = this.cz + Math.sin(a + da) * Rt;
     // 몸이 한 바퀴보다 길어서, 고도를 천천히 오르내려 몸통이 자기 몸과 겹치지 않게 한다
     // 상하 이동을 적극적으로: 크게 솟구쳤다 내려꽂히기를 반복한다 (몸이 한 바퀴보다 길어서 몸통이 자기 몸과 겹치지 않는 효과도 있다)
-    const gy = alt + 12 * Math.sin(this.t * 0.46) + 3.5 * Math.sin(this.t * 0.97 + 1);
+    // 몸을 세우고 있을 때는 몸통이 길게 늘어져 있어 (꼬리 끝이 구름 바다에 잠기지 않게) 오르내림 폭을 줄인다
+    const osc = this.upOn ? 0.4 : 1;
+    const gy = alt + osc * (12 * Math.sin(this.t * 0.46) + 3.5 * Math.sin(this.t * 0.97 + 1));
     const wantYaw = Math.atan2(gx - p.x, gz - p.z);
     const rate = clamp(wrapPi(wantYaw - this.yaw) * 2.4, -turn, turn);
     this.yawRate = approach(this.yawRate, rate, 6, dt);
@@ -549,13 +558,15 @@ export class Dragon implements Boss {
    *  쓰러져 바닥에 누운 몸은 벽처럼 막기만 하고 피해는 주지 않는다 */
   private updateStrike() {
     this.bodyHitCd = Math.max(0, this.bodyHitCd - this.lastDt);
-    if (this.bodyHitCd > 0 || this.player.dead || !this.alive || this.dying > 0 || this.state === 'enter' || this.rig.lying) return;
+    if (this.bodyHitCd > 0 || this.player.dead || !this.alive || this.dying > 0 || this.state === 'enter') return;
     const pl = this.player.pos;
     for (const s of this.rig.parts) {
       if (s.kind === 'wing') continue;
-      const R = s.r * 0.9 + 0.35;
+      // 몸통에 닿는 순간 바로 피해 (바닥에 누워 있어도 마찬가지). 플레이어가 몸통 벽에 막히는 거리보다 약간 넓게 잡아, 막히기 전에 반드시 맞는다
+      const R = s.r * 0.82 + 0.5 + 0.2;
       if (Math.hypot(pl.x - s.x, pl.z - s.z) < R && Math.abs(s.y - 0.9) < s.r + 1.2) {
-        if (this.player.takeDamage(s.x, s.z)) this.bodyHitCd = 2.4; // 긴 몸통이 한 번 훑는 동안 연달아 맞지 않게
+        // 연속 접촉은 플레이어의 무적 시간(invuln)이 막아 준다
+        if (this.player.takeDamage(s.x, s.z)) this.bodyHitCd = 0.15;
         return;
       }
     }
