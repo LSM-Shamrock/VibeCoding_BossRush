@@ -230,10 +230,11 @@ export class DragonLegs {
 
       // 무릎은 위 + 바깥으로 튀어나온다
       const a = HOME_ANGLE[i];
+      // 앞다리는 뒷다리와 반대로 꺾인다: 무릎이 앞이 아니라 뒤로 튀어나오고 발끝은 그대로 앞을 향한다
       this.pole
         .copy(f.R)
         .multiplyScalar(s * Math.cos(a))
-        .addScaledVector(f.T, Math.sin(a));
+        .addScaledVector(f.T, FORE[i] ? -Math.sin(a) : Math.sin(a));
       this.pole.y = 0;
       if (this.pole.lengthSq() < 1e-6) this.pole.set(s, 0, 0);
       this.pole.normalize().multiplyScalar(0.45);

@@ -921,7 +921,7 @@ export class DragonRig {
     let dz = h.z - last.z;
     let d = Math.hypot(dx, dy, dz);
     let guard = 0;
-    while (d >= TS && guard++ < 40) {
+    while (d >= TS && guard++ < 90) {
       const k = TS / d;
       this.trFirst = (this.trFirst - 1 + CAP) % CAP;
       const p = this.trail[this.trFirst];

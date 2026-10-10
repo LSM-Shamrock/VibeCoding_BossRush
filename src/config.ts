@@ -267,7 +267,7 @@ export const CFG = {
       daze: 1.5, // 돌진 · 내리꽂기 뒤 어지러운 시간 (머리 피해 ×3)
       bite: { tell: 0.95, speed: 31, min: 14, max: 24 },
       spit: { windup: 0.85, count: 3, gap: 0.36, flight: 1.0, peak: 6, radius: 2.1, spread: 3.2, recover: 0.7 },
-      swoop: { alt: 8, climb: 1.0, tell: 1.0, dive: 0.4, radius: 3.0 },
+      swoop: { alt: 30, back: 30, climb: 1.7, tell: 1.0, dive: 0.7, radius: 3.0 }, // alt = 도약 높이, back = 표적에서 떨어진 거리 (비스듬히 내려꽂는다)
       sky: { alt: 255, radius: 62, speed: 13 }, // 본체가 도는 높이 · 반경 · 속도
     },
   },

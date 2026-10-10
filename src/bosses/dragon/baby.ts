@@ -110,6 +110,7 @@ export class BabyDragon implements Target {
     for (let i = 0; i < this.rig.parts.length; i++) this.spheres.push({ x: 0, y: 0, z: 0, r: 1 });
     // 떨어질 자리 표시
     owner.host.fx.telegraphs.circle(x, z, 3.2, Math.sqrt((70 - this.hy) / 35), () => {});
+    owner.host.targets.push(this);
     this.sync(0);
   }
 
@@ -410,30 +411,59 @@ export class BabyDragon implements Target {
     const { host, field, player } = this.owner;
     const C = B.swoop;
     const tell = C.tell / this.rage;
+    const pl = player.pos;
+    // 내리꽂기 전에 머무는 높은 지점 H: 플레이어에게서 C.back 만큼 떨어진 하늘. 몸 전체가 비스듬히 내려꽂히도록 높이와 거리를 함께 잡는다
+    const hover = (out: THREE.Vector3) => {
+      let dx = this.pos.x - pl.x;
+      let dz = this.pos.z - pl.z;
+      let l = Math.hypot(dx, dz);
+      if (l < 1e-3) {
+        dx = 1;
+        dz = 0;
+        l = 1;
+      }
+      out.set(pl.x + (dx / l) * C.back, C.alt, pl.z + (dz / l) * C.back);
+      const r = Math.hypot(out.x, out.z);
+      if (r > WORLD.radius - 1) {
+        // 벽 쪽이면 안쪽(중앙 쪽)에서 내려온다
+        const cl = Math.hypot(pl.x, pl.z) || 1;
+        out.set(pl.x - (pl.x / cl) * C.back, C.alt, pl.z - (pl.z / cl) * C.back);
+      }
+      return out;
+    };
     if (this.sub === 0) {
-      // 떠오르며 플레이어 쪽으로 다가간다
-      const toP = this.angToPlayer();
-      this.turn(toP + this.orbitDir * 0.5, 4, dt);
-      const d = this.distToPlayer();
-      this.walk(d > 9 ? 12 : 4, dt);
-      this.hy = approach(this.hy, C.alt, 3.2, dt);
+      // 날갯짓으로 높이 떠올라 H 로 간다
+      const H = hover(this.tmp2);
+      const dx = H.x - this.pos.x;
+      const dz = H.z - this.pos.z;
+      const dd = Math.hypot(dx, dz);
+      this.turn(Math.atan2(dx, dz), 5, dt);
+      const stepD = Math.min(dd, 20 * dt);
+      if (dd > 1e-3) {
+        this.pos.x += (dx / dd) * stepD;
+        this.pos.z += (dz / dd) * stepD;
+      }
+      this.speed = stepD / Math.max(dt, 1e-4);
+      this.hy = approach(this.hy, C.alt, 2.2, dt);
       this.pos.y = this.hy;
-      this.pitch = approach(this.pitch, 0.2, 4, dt);
+      this.pitch = approach(this.pitch, 0.5, 3, dt);
       this.flap.fold = approach(this.flap.fold, 0, 8, dt);
-      this.flap.hz = 2.6;
-      this.flap.amp = 1.0;
+      this.flap.hz = 1.6;
+      this.flap.amp = 0.95;
       this.jaw = approach(this.jaw, 0.4, 5, dt);
       this.lookYaw = approach(this.lookYaw, 0, 8, dt);
       if (this.t >= C.climb) {
         this.sub = 1;
         this.t = 0;
-        const pl = player.pos;
         this.goal.set(pl.x, 0, pl.z);
         const r = Math.hypot(this.goal.x, this.goal.z);
         if (r > WORLD.radius - 2) {
           this.goal.x *= (WORLD.radius - 2) / r;
           this.goal.z *= (WORLD.radius - 2) / r;
         }
+        this.from.copy(hover(this.tmp2));
+        this.from.x = this.goal.x + (this.from.x - pl.x);
+        this.from.z = this.goal.z + (this.from.z - pl.z);
         host.fx.telegraphs.circle(this.goal.x, this.goal.z, C.radius, tell, () => {});
         host.sfx.telegraph();
         this.roar(1);
@@ -441,22 +471,20 @@ export class BabyDragon implements Target {
       return;
     }
     if (this.sub === 1) {
-      // 표적 위로 이동하며 겨눈다
-      this.turn(Math.atan2(this.goal.x - this.pos.x, this.goal.z - this.pos.z), 6, dt);
-      const dx = this.goal.x - this.pos.x;
-      const dz = this.goal.z - this.pos.z;
-      const dd = Math.hypot(dx, dz);
-      const stepD = Math.min(dd - 0.5 > 0 ? dd - 0.5 : 0, 16 * dt);
-      if (dd > 1e-3) {
-        this.pos.x += (dx / dd) * stepD;
-        this.pos.z += (dz / dd) * stepD;
-      }
-      this.speed = stepD / Math.max(dt, 1e-4);
-      this.hy = approach(this.hy, C.alt + 0.8 + Math.sin(this.t * 7) * 0.3, 6, dt);
+      // H 에서 표적을 겨눈다 (몸을 표적 쪽으로 기울인다)
+      const k = 1 - Math.exp(-6 * dt);
+      const ox = this.pos.x;
+      const oz = this.pos.z;
+      this.pos.x += (this.from.x - this.pos.x) * k;
+      this.pos.z += (this.from.z - this.pos.z) * k;
+      this.hy = approach(this.hy, C.alt + Math.sin(this.t * 6) * 0.4, 6, dt);
       this.pos.y = this.hy;
-      this.pitch = approach(this.pitch, -0.2, 6, dt);
-      this.flap.hz = 2.8;
-      this.flap.amp = 1.0;
+      this.speed = Math.hypot(this.pos.x - ox, this.pos.z - oz) / Math.max(dt, 1e-4);
+      this.turn(Math.atan2(this.goal.x - this.pos.x, this.goal.z - this.pos.z), 7, dt);
+      const down = Math.atan2(C.alt - 1.3, Math.hypot(this.goal.x - this.pos.x, this.goal.z - this.pos.z));
+      this.pitch = approach(this.pitch, -down * (0.3 + 0.7 * Math.min(1, this.t / tell)), 5, dt);
+      this.flap.hz = 1.8;
+      this.flap.amp = 0.9;
       this.flap.fold = approach(this.flap.fold, 0, 8, dt);
       if (this.t >= tell) {
         this.sub = 2;
@@ -468,17 +496,19 @@ export class BabyDragon implements Target {
       }
       return;
     }
-    // 내리꽂기
+    // 내리꽂기: H → 표적을 한 줄로 날아 내려 몸 전체가 같은 길을 따라온다
     const k = Math.min(1, this.t / C.dive);
-    const e = k * k;
+    const e = k * (0.4 + 0.6 * k);
+    const ox = this.pos.x;
+    const oz = this.pos.z;
     this.pos.x = this.from.x + (this.goal.x - this.from.x) * e;
     this.pos.z = this.from.z + (this.goal.z - this.from.z) * e;
     this.pos.y = this.from.y + (1.3 - this.from.y) * e;
     this.hy = this.pos.y;
     this.yaw = Math.atan2(this.goal.x - this.from.x, this.goal.z - this.from.z);
-    this.pitch = -1.0 * Math.min(1, k * 3);
+    this.pitch = -Math.atan2(this.from.y - 1.3, Math.hypot(this.goal.x - this.from.x, this.goal.z - this.from.z));
     this.flap.fold = approach(this.flap.fold, 1, 14, dt);
-    this.speed = 30;
+    this.speed = Math.hypot(this.pos.x - ox, this.pos.z - oz) / Math.max(dt, 1e-4);
     if (k >= 1) {
       this.strike = false;
       host.shake(1.1, 0.25);
@@ -487,7 +517,6 @@ export class BabyDragon implements Target {
       field.explode(this.goal.x, this.goal.z, C.radius, false);
       host.fx.ring(this.goal.x, this.goal.z, C.radius * 2.6, 0.6, 0xffb060);
       host.fx.particles.burst(this.tmp.set(this.goal.x, 0.6, this.goal.z), 0x7a5a42, 40, 10, 0.9, 0.4, 0.5, 6, 1.2);
-      const pl = player.pos;
       const d = Math.hypot(pl.x - this.goal.x, pl.z - this.goal.z);
       if (d < 9) player.push(this.goal.x, this.goal.z, 5 * (1 - d / 9) + 1.5);
       this.state = 'daze';
@@ -693,6 +722,7 @@ export class BabyDragon implements Target {
   }
 
   dispose() {
+    this.owner.host.targets = this.owner.host.targets.filter((x) => x !== this);
     this.rig.dispose();
   }
 }
