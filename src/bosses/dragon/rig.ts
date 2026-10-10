@@ -1017,7 +1017,7 @@ export class DragonRig {
     // ── 파도(헤엄치는 일렁임): 꼬리로 갈수록 크다. 쓰러져 있을 때는 몸을 비틀며 숨쉰다 ──
     this.frames(this.P, false);
     if (up) this.uprightFrames();
-    const und = this.curUnd * (1 - 0.8 * this.lyingK) * (1 - 0.9 * smooth(this.curUp));
+    const und = this.curUnd * (1 - 0.8 * this.lyingK) * (1 - 0.45 * smooth(this.curUp));
     const flapBob = Math.sin(this.flapPh);
     const upK = smooth(this.curUp);
     for (let i = 0; i < NR; i++) {
@@ -1064,47 +1064,39 @@ export class DragonRig {
     this.updateMaterials(t);
   }
 
-  /** 수직 자세의 마디 위치: 머리 아래로 목 · 몸통이 곧게 늘어지고, 그 아래에서 꼬리가 좁아지는 회오리(나선)로 말린다 */
+  /** 수직 자세의 마디 위치: 머리 · 목 · 가슴은 일어서 있고(완만한 S자), 가슴 아래에서 몸이 뒤로 젖혀져 꼬리까지 수평으로 뻗는다 */
   private applyUpright() {
     const Q = this.Q;
     const H = this.head;
     const fx = Math.sin(this.yaw);
     const fz = Math.cos(this.yaw);
-    // 빠르게 움직일수록 몸이 뒤로 살짝 젖혀진다
-    const lean = 0.05 + clamp(this.speed * 0.0045, 0, 0.22);
-    const sl = Math.sin(lean);
-    const cl = Math.cos(lean);
-    const Lc = IC * DS; // 머리 ~ 앞다리: 수직 기둥 (뒷다리부터 꼬리 끝까지는 앞쪽으로 말린다)
-    const Lb = 15; // 기둥 → 나선으로 꺾이는 구간
-    const tailLen = (NR - 1 - IC) * DS;
-    const R0 = 11;
-    const R1 = 2.3;
-    // 기둥
-    for (let i = 0; i <= IC; i++) {
+    const back = Math.atan2(-fz, -fx); // 뒤쪽 수평 방향 각
+    const lean = 0.1 + clamp(this.speed * 0.005, 0, 0.25); // 빠를수록 더 젖혀진다
+    const Lc = IC * DS; // 머리 ~ 앞다리: 일어선 구간
+    const Lb = 26; // 일어선 몸이 뒤로 눕는 구간
+    const t = this.t;
+    let x = H.x;
+    let y = H.y;
+    let z = H.z;
+    Q[0].set(x, y, z);
+    for (let i = 1; i < NR; i++) {
       const s = i * DS;
-      const sway = Math.sin(this.t * 0.9 - s * 0.045) * 0.7 * (s / Lc);
-      Q[i].set(H.x - fx * sl * s + fz * sway, H.y - cl * s, H.z - fz * sl * s - fx * sway);
-    }
-    // 꼬리: 방향을 한 칸씩 적분 (수직 아래 → 수평 선회로 서서히 눕고, 반지름은 좁아진다)
-    let x = Q[IC].x;
-    let y = Q[IC].y;
-    let z = Q[IC].z;
-    // 몸이 바라보는 쪽(앞)으로 꺾여 말린다
-    let phi = Math.atan2(fz, fx) + 0.2 * Math.sin(this.t * 0.6);
-    const g0 = Math.PI / 2 - lean;
-    for (let i = IC + 1; i < NR; i++) {
-      const u = (i - IC) * DS;
-      const kb = smooth(u / Lb);
-      const kr = Math.pow(clamp((u - Lb) / Math.max(1, tailLen - Lb), 0, 1), 0.85);
-      const r = lerp(R0, R1, kr);
-      // 한 바퀴 돌 때 내려가는 높이 = 위쪽 바퀴와 겹치지 않을 만큼
-      const gc = Math.asin(Math.min(0.7, (2.3 * RAD[i] + 0.7) / (TAU * r)));
-      const g = lerp(g0, gc, kb);
-      const cg = Math.cos(g);
-      phi += (DS * cg) / r;
-      x += Math.cos(phi) * cg * DS;
-      y -= Math.sin(g) * DS;
-      z += Math.sin(phi) * cg * DS;
+      const u = s - Lc;
+      // a: 수직 아래(0)에서 뒤쪽으로 젖힌 각 (π/2 = 수평으로 뒤를 향함)
+      let a = lean + 0.2 * Math.sin(s * 0.07 - t * 0.9) - 0.34 * Math.max(0, 1 - s / 16); // 목 끝은 앞으로 살짝 숙인다
+      let psi = back;
+      if (u > 0) {
+        const k = smooth(u / Lb);
+        a = lerp(a, 1.46, k);
+        // 꼬리는 옆으로 휘청이며 뒤로 끌린다
+        const g = smooth(u / 40);
+        a += 0.14 * g * Math.sin(u * 0.09 - t * 1.6);
+        psi += 0.34 * g * Math.sin(u * 0.075 - t * 1.9);
+      }
+      const sa = Math.sin(a);
+      x += Math.cos(psi) * sa * DS;
+      y -= Math.cos(a) * DS;
+      z += Math.sin(psi) * sa * DS;
       Q[i].set(x, y, z);
     }
     // 머리 쪽부터 차례로 섞는다
@@ -1121,7 +1113,7 @@ export class DragonRig {
     for (let i = 0; i < NR; i++) {
       const k = smooth(clamp(this.curUp * 1.5 - (i / NR) * 0.5, 0, 1));
       if (k < 0.01) continue;
-      const w = smooth(clamp((i - IC) / 16, 0, 1)); // 0 = 몸통(등이 뒤) / 1 = 꼬리 나선(등이 위)
+      const w = smooth(clamp((i - IC) / 32, 0, 1)); // 0 = 몸통(등이 뒤) / 1 = 꼬리 나선(등이 위)
       this.tv.set(-fx * (1 - w), w, -fz * (1 - w));
       this.tv.addScaledVector(this.T[i], -this.tv.dot(this.T[i]));
       if (this.tv.lengthSq() < 1e-4) continue;
