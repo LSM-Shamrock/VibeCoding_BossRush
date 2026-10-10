@@ -810,6 +810,11 @@ export class DragonRig {
     this.lyingK = 0;
   }
 
+  /** 날갯짓 횟수(소수 포함) — 정수가 넘어갈 때마다 내리치기가 시작된다 */
+  get flapCycle() {
+    return this.flapPh / TAU;
+  }
+
   get lying() {
     return this.lyingK > 0;
   }

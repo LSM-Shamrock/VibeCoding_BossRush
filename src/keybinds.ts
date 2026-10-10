@@ -17,8 +17,8 @@ export const ACTIONS: readonly ActionInfo[] = [
   { id: 'down', label: '아래로 이동', hint: '', group: 'move', defaults: ['KeyS', 'ArrowDown'] },
   { id: 'left', label: '왼쪽으로 이동', hint: '', group: 'move', defaults: ['KeyA', 'ArrowLeft'] },
   { id: 'right', label: '오른쪽으로 이동', hint: '', group: 'move', defaults: ['KeyD', 'ArrowRight'] },
-  { id: 'dash', label: '대시', hint: '짧은 무적', group: 'combat', defaults: ['ShiftLeft', 'ShiftRight'] },
-  { id: 'jump', label: '점프', hint: '작은 몸집의 적을 뛰어넘는다', group: 'combat', defaults: ['Space', null] },
+  { id: 'dash', label: '대시', hint: '짧은 무적', group: 'combat', defaults: ['Space', null] },
+  { id: 'jump', label: '점프', hint: '작은 몸집의 적을 뛰어넘는다', group: 'combat', defaults: ['ShiftLeft', 'ShiftRight'] },
   { id: 'special', label: '특수기', hint: '게이지가 가득 찼을 때', group: 'combat', defaults: ['KeyQ', null] },
   { id: 'lockon', label: '락온 (보스 주시)', hint: '마우스 휠 클릭으로도 가능', group: 'combat', defaults: ['KeyE', null] },
   { id: 'mute', label: '소리 켜기/끄기', hint: '', group: 'system', defaults: ['KeyM', null] },
@@ -30,7 +30,7 @@ export const actionLabel = (id: ActionId) => INFO.get(id)!.label;
 
 type Pair = [string | null, string | null];
 
-const STORE_KEY = 'deepnest.keys.v2';
+const STORE_KEY = 'deepnest.keys.v3';
 
 /* ───────────── 지정할 수 없는 키 ───────────── */
 const FIXED_REASON: Record<string, string> = {

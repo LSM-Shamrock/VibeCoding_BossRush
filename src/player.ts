@@ -408,7 +408,7 @@ export class Player {
       this.host.fx.particles.burst(this.tmpA.set(this.pos.x, 0.15, this.pos.z), 0xd9b87c, 8, 3.5, 0.35, 0.1, 0.2);
     }
     if (this.pos.y > 0 || this.velY > 0) {
-      this.velY -= 38 * dt;
+      this.velY -= (this.velY > 0 ? 38 : 95) * dt; // 올라갈 때는 그대로, 내려올 때는 더 빨리
       this.pos.y += this.velY * dt;
       if (this.pos.y <= 0) {
         this.pos.y = 0;

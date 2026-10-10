@@ -109,6 +109,7 @@ export class Dragon implements Boss {
   private lastHurtRoar = -9;
   private ray: RayState | null = null;
   private ticks: Array<(dt: number) => void> = [];
+  private ends: Array<() => void> = [];
   private jet: { burnLife: number; last: THREE.Vector3; snd: number } | null = null;
   private dying = 0;
   private dyingVel = new V3();
@@ -660,6 +661,16 @@ export class Dragon implements Boss {
     this.ticks.push(fn);
   }
 
+  /** 공격이 끝나거나 끊길 때 한 번 불린다 (공격이 만든 오브젝트 정리용) */
+  onEnd(fn: () => void) {
+    this.ends.push(fn);
+  }
+  private runEnds() {
+    const e = this.ends;
+    this.ends = [];
+    for (const f of e) f();
+  }
+
   /** 공격 중 delay 초 뒤에 한 번 실행한다 (공격이 끝나면 취소) */
   after(delay: number, fn: () => void) {
     let t = 0;
@@ -677,6 +688,7 @@ export class Dragon implements Boss {
   private endAttack() {
     this.script = null;
     this.ticks = [];
+    this.runEnds();
     this.currentAttack = null;
     this.strikeOn = false;
     this.cruiseOverride = null;
@@ -700,6 +712,7 @@ export class Dragon implements Boss {
   private abortAttack() {
     this.script = null;
     this.ticks = [];
+    this.runEnds();
     this.move = null;
     this.hover = null;
     this.jet = null;
@@ -833,6 +846,7 @@ export class Dragon implements Boss {
     this.state = 'dead';
     this.script = null;
     this.ticks = [];
+    this.runEnds();
     this.move = null;
     this.hover = null;
     this.jet = null;

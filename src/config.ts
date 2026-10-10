@@ -90,7 +90,7 @@ export const CFG = {
   spider: {
     name: '동굴 여왕 거미',
     maxHp: 1100,
-    phaseAt: [0.67, 0.34], // 체력이 이 비율 이하가 되면 포효 후 다음 페이즈 (페이즈 2, 3)
+    phaseAt: [0.75, 0.42], // 1페이즈 체력 25% (이전 33% 의 0.75배) · 3페이즈 체력 42% // 체력이 이 비율 이하가 되면 포효 후 다음 페이즈 (페이즈 2, 3)
     weakMult: 2, // 배(약점) 피해 배율
     exposedMult: 3, // 후딜(약점 노출) 중 배 피해 배율
     thoraxR: 1.7, // 몸통(머리가슴) 판정 반경
@@ -151,7 +151,7 @@ export const CFG = {
     name: '심연의 이무기',
     floorLabel: '2층 · 이무기의 못',
     maxHp: 1200,
-    phaseAt: [0.67, 0.34],
+    phaseAt: [0.75, 0.42], // 1페이즈 체력 25% (이전 33% 의 0.75배) · 3페이즈 체력 42%
     headMult: 2, // 머리(약점) 피해 배율
     bodyMult: 0.6, // 몸통 피해 배율 — 맞히기는 쉽지만 덜 아프다
     exposedMult: 3, // 후딜(머리를 쳐들고 허점을 보일 때) 머리 피해 배율
@@ -212,7 +212,7 @@ export const CFG = {
     name: '겁화의 용',
     floorLabel: '3층 · 불타는 하늘 신전',
     maxHp: 1250, // 이무기(1200)보다 살짝만 높게
-    phaseAt: [0.67, 0.34],
+    phaseAt: [0.75, 0.42], // 1페이즈 체력 25% (이전 33% 의 0.75배) · 3페이즈 체력 42%
     headMult: 1.5, // 머리 피해 배율
     bodyMult: 0.7, // 몸통
     wingMult: 0.5, // 날개
@@ -223,9 +223,9 @@ export const CFG = {
     idle: [1.7, 1.2, 0.85],
 
     sequence: [
-      ['spit', 'strafe', 'wind', 'swoop', 'vortex', 'spit', 'strafe', 'swoop'],
-      ['meteor', 'strafe', 'wind', 'crash', 'vortex', 'spit', 'swoop', 'meteor', 'scythe', 'strafe', 'crash'],
-      ['sunray', 'vortex', 'gale', 'wind', 'strafe', 'scythe', 'crash', 'meteor', 'sunray', 'swoop', 'gale', 'scythe', 'wind', 'crash'],
+      ['spit', 'strafe', 'wind', 'swoop', 'orbit', 'spit', 'strafe', 'swoop'],
+      ['meteor', 'strafe', 'wind', 'crash', 'orbit', 'spit', 'swoop', 'meteor', 'scythe', 'strafe', 'crash'],
+      ['sunray', 'orbit', 'gale', 'wind', 'strafe', 'scythe', 'crash', 'meteor', 'sunray', 'swoop', 'gale', 'scythe', 'wind', 'crash'],
     ],
 
     // 화염탄: 입에 불을 모았다가 불덩이를 연달아 던진다. 착지 고리가 차오른다. (페이즈 2~: 바닥에 불이 남는다)
@@ -242,10 +242,10 @@ export const CFG = {
     sunray: { charge: 2.3, dur: 4.4, chase: 7.3, radius: 2.4, lock: 1.0 },
     // 날개 충격파 (페이즈 3): 제단 위에서 날개를 내리칠 때마다 땅을 훑는 불꽃 고리가 퍼진다
     gale: { beats: 4, gap: 1.35, tell: 0.85, speed: 14, width: 1.5, radius: 3.8 },
-    // 불기둥 연쇄: 플레이어 둘레로 나선을 그리며 연달아 불기둥이 치솟는다 (페이즈 3은 나선 두 줄)
-    wind: { gusts: [3, 4, 5], gap: [1.7, 1.5, 1.3], tell: 0.9, speed: 19, reach: 62, start: 30, thick: 3.6, width: 26, hole: [5.5, 4.8, 4.2], holeRange: 14 },
-    // 불꽃 바퀴: 제단 중앙에서 뻗는 불길 줄기들이 풍차처럼 돌며 차례로 터진다. 줄기 사이 빈 쐐기로 피한다
-    vortex: { spokes: [2, 3, 4], steps: [5, 6, 8], gap: [0.62, 0.52, 0.42], tell: [1.05, 0.95, 0.85], width: 5.6, turn: 0.52 },
+    // 폭풍 날갯짓: 아레나 밖 하늘에서 몸을 세우고 날개를 크게 휘저어, 내리칠 때마다 굴러오는 회오리를 쏟는다
+    wind: { flaps: [3, 4, 5], count: [1, 2, 3], fan: 0.34, hz: 0.7, amp: 1.25, release: 0.5, dist: 46, alt: 92, speed: [14, 16, 18], radius: 2.8, pull: 6.5, reach: 62 },
+    // 선회 사격: 이무기처럼 아레나 가장자리를 낮게 돌며 불덩이를 던진다
+    orbit: { revs: [1.1, 1.4, 1.7], speed: [27, 31, 35], radius: 27, alt: 8, interval: [0.8, 0.62, 0.48], flight: 1.0, peak: 6, bomb: 2.6, zone: [0, 3, 4] },
     // 회전 광선: 하늘에서 쏟아지는 광선이 제단 위를 구불구불 쓸고 다닌다. 지나간 자리는 불탄다
     scythe: { dur: [4.2, 4.6, 5.0], omega: 0.85, radius: 2.3, charge: 1.6 },
     roar: 3.0, // 페이즈 전환 포효 (이 동안 무적)
