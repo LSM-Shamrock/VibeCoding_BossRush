@@ -6,6 +6,7 @@ import type { Player } from '../../player';
 import { DragonRig, type WingCtl } from './rig';
 import { FireField } from './fire';
 import { BabyDragon, type BabyOwner } from './baby';
+import { HealFlames } from '../../healflame';
 import { buildAttack, SEQUENCE_ATTACKS, type AttackName, type AttackScript } from './attacks';
 
 const V3 = THREE.Vector3;
@@ -56,6 +57,7 @@ export class Dragon implements Boss, BabyOwner {
   readonly attackNames: readonly string[] = SEQUENCE_ATTACKS;
   readonly rig: DragonRig;
   readonly field: FireField;
+  private heals: HealFlames;
   readonly phaseMarks: number[] = [...D.phaseAt];
   readonly maxHp: number = D.maxHp;
 
@@ -137,6 +139,8 @@ export class Dragon implements Boss, BabyOwner {
   ) {
     this.rig = new DragonRig(host.scene);
     this.field = new FireField(host, player);
+    this.heals = new HealFlames(host, player);
+    this.field.onBurn = (x, z) => this.heals.tryDrop(x, z);
     host.targets.push(this);
     this.intro(drop);
   }
@@ -313,7 +317,7 @@ export class Dragon implements Boss, BabyOwner {
     const base = Math.atan2(pl.z, pl.x) + Math.PI;
     for (let i = 0; i < n; i++) {
       const a = base + (i - (n - 1) / 2) * 1.5;
-      this.babies.push(new BabyDragon(this, i, Math.cos(a) * 13, Math.sin(a) * 13, each));
+      this.babies.push(new BabyDragon(this, i, Math.cos(a) * WORLD.radius * 0.54, Math.sin(a) * WORLD.radius * 0.54, each));
     }
     this.babyState = 'fight';
     this.invulnerable = true;
@@ -387,6 +391,7 @@ export class Dragon implements Boss, BabyOwner {
   update(dt: number) {
     this.t += dt;
     this.field.update(dt);
+    this.heals.update(dt);
 
     if (this.state === 'dead') {
       this.updateDying(dt);
@@ -430,7 +435,7 @@ export class Dragon implements Boss, BabyOwner {
     // 아레나 위에서는 아래가 제단이라 수평 자세를 유지한다 (히스테리시스로 경계에서 떨리지 않게)
     const dist = Math.hypot(this.p.x, this.p.z);
     const ok = this.alive && this.dying <= 0 && this.state !== 'enter' && !this.move && !r.lying && this.babyState !== 'fight';
-    this.upOn = ok && dist > (this.upOn ? 32 : 35);
+    this.upOn = ok && dist > WORLD.radius * (this.upOn ? 1.33 : 1.46);
     r.upright = this.upOn;
     void dt;
   }
@@ -1149,6 +1154,7 @@ export class Dragon implements Boss, BabyOwner {
     for (const b of this.babies) b.dispose();
     this.babies = [];
     this.field.dispose();
+    this.heals.dispose();
     this.rig.dispose();
     this.host.sfx.drone(false);
     this.host.sfx.wind(0);

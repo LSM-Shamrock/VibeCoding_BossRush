@@ -368,7 +368,10 @@ export class FireField {
   }
 
   /** 불타는 바닥을 남긴다 (위에 서 있으면 피해) */
+  /** 불길이 땅에 남을 때마다 불린다 (회복 불꽃을 떨어뜨릴지 정하는 데 쓴다) */
+  onBurn: ((x: number, z: number) => void) | null = null;
   burn(x: number, z: number, r: number, life: number) {
+    this.onBurn?.(x, z);
     let z0 = this.zones.find((q) => !q.active);
     if (!z0) z0 = this.zones.reduce((a, b) => (a.life - a.t < b.life - b.t ? a : b));
     z0.active = true;
@@ -569,7 +572,8 @@ export class FireField {
         const a = Math.random() * TAU;
         fx.particles.burst(this.tmp.set(w.x + Math.cos(a) * w.r, 0.2, w.z + Math.sin(a) * w.r), FIRE, 1, 1.5, 0.35, 0.12, 0.5, 2, 1.8);
       }
-      if (!w.hit && !pl.dead) {
+      // 땅을 훑는 불꽃 고리: 점프로 뛰어넘을 수 있다 (대시 무적으로도 통과)
+      if (!w.hit && !pl.dead && pl.pos.y < 0.7) {
         const d = Math.hypot(pl.pos.x - w.x, pl.pos.z - w.z);
         if (d > w.r - w.width - pl.hitRadius && d < w.r + pl.hitRadius) {
           if (pl.takeDamage(w.x, w.z)) w.hit = true;

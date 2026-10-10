@@ -541,7 +541,7 @@ function sunray(s: Dragon): AttackScript {
       fn: () => {
         const pl = s.player.pos;
         const a = Math.atan2(pl.z, pl.x) + Math.PI + (Math.random() - 0.5) * 0.9;
-        station.set(Math.cos(a) * 28, 44, Math.sin(a) * 28);
+        station.set(Math.cos(a) * WORLD.radius * 1.17, 44, Math.sin(a) * WORLD.radius * 1.17);
         s.look('player');
         s.rig.jaw = 0.5;
         s.setWings({ hz: 0.8, amp: 0.5, raise: 0.5, spread: 1 });
@@ -656,8 +656,8 @@ function gale(s: Dragon): AttackScript {
     s.rig.armPose = 'brace'; s.rig.legPose = 'brace';
     field.explode(0, 0, C.radius, true);
     field.wave(0, 0, WORLD.radius + 8, C.speed, C.width);
-    field.wave(0, 0, WORLD.radius + 8, C.speed, C.width * 0.8, 0.42);
-    if (finale) field.wave(0, 0, WORLD.radius + 8, C.speed * 1.2, C.width, 0.32);
+    field.wave(0, 0, WORLD.radius + 8, C.speed, C.width * 0.8, C.second);
+    if (finale) field.wave(0, 0, WORLD.radius + 8, C.speed, C.width, C.third);
     host.shake(1.6, 0.35);
     host.sfx.wingbeat(1.8);
     host.sfx.land();
@@ -669,7 +669,7 @@ function gale(s: Dragon): AttackScript {
     // 돌풍: 중심에서 멀어질수록 약하게 밀어낸다
     const pl = s.player;
     const d = Math.hypot(pl.pos.x, pl.pos.z);
-    if (d < 24) pl.push(0, 0, 8 * (1 - d / 24) + 2);
+    if (d < WORLD.radius) pl.push(0, 0, 8 * (1 - d / WORLD.radius) + 2);
   };
   const tEnd = t1 + (C.beats - 1) * C.gap;
   steps.push({

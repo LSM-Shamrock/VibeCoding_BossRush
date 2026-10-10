@@ -579,6 +579,12 @@ export class Player {
     this.host.sfx.relight();
   }
 
+  /** 체력 회복 (불꽃 한 칸) */
+  heal(n = 1) {
+    if (this.dead) return;
+    this.hp = Math.min(DIFF.hp, this.hp + n);
+  }
+
   /* ───────────── 체력 디버그 ───────────── */
   setHp(v: number) {
     this.hp = Math.max(1, Math.min(DIFF.hp, v));

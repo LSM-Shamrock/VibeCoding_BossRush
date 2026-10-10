@@ -9,7 +9,7 @@ export const CFG = {
   pond: { radius: 24, spawnZ: 10.8 },
   // 3층 하늘 신전 제단: 구름 바다 위에 뜬 대리석 제단. 용(몸길이 ≈ 50, 날개폭 ≈ 45)은 하늘을 선회하므로 아레나는 반경만 넓다
   // 3층: 다른 보스 아레나와 비슷한 크기 (2층 연못과 같은 반경 24)
-  peak: { radius: 24, spawnZ: 11 },
+  peak: { radius: 30, spawnZ: 13.75 }, // 용 맵 (이전 24 의 1.25배)
 
   // 플레이어와 보스를 함께 화면에 담도록: 초점 = 플레이어×followRatio + 보스×bossRatio
   // 어깨 너머 3인칭: 플레이어 뒤·위에서 바라본다. 마우스로 시점(좌우/상하)을 돌린다.
@@ -240,15 +240,15 @@ export const CFG = {
     // 추락 강타 (페이즈 2~): 하늘에서 표적 위로 내리꽂아 충격파를 일으키고, 쓰러져 약점이 드러난다
     crash: { tell: [1.7, 1.7, 1.5], radius: 7.0, stun: [3.6, 3.6, 3.0], wave: 18 },
     // 태양 광선 (페이즈 3): 입가에 태양을 모아 쏜다. 광선의 조준점이 플레이어를 끈질기게 쫓는다
-    sunray: { charge: 2.3, dur: 4.4, chase: 7.3, radius: 2.4, lock: 1.0 },
+    sunray: { charge: 2.3, dur: 4.4, chase: 6.57, radius: 2.16, lock: 1.0 }, // 쫓는 속도 · 판정 범위 0.9배
     // 날개 충격파 (페이즈 3): 제단 위에서 날개를 내리칠 때마다 땅을 훑는 불꽃 고리가 퍼진다
-    gale: { beats: 4, gap: 1.35, tell: 0.85, speed: 14, width: 1.5, radius: 3.8 },
+    gale: { beats: 4, gap: 1.6, tell: 0.95, speed: 11, width: 1.4, radius: 3.8, second: 0.95, third: 1.8 }, // 고리 사이 간격(초) second/third — 점프나 대시로 하나씩 넘는다
     // 폭풍 날갯짓: 아레나 밖 하늘에서 몸을 세우고 날개를 크게 휘저어, 내리칠 때마다 굴러오는 회오리를 쏟는다
     wind: { flaps: [3, 4, 5], count: [1, 2, 3], fan: 0.34, hz: 0.55, fall: 1.1, dist: 46, alt: 92, speed: [14, 16, 18], radius: 2.8, pull: 6.5, reach: 62 },
     // 선회 사격: 이무기처럼 아레나 가장자리를 낮게 돌며 불덩이를 던진다
-    orbit: { revs: [1.1, 1.4, 1.7], speed: [27, 31, 35], radius: 27, alt: 8, interval: [0.8, 0.62, 0.48], flight: 1.0, peak: 6, bomb: 2.6, zone: [0, 3, 4] },
+    orbit: { revs: [1.1, 1.4, 1.7], speed: [27, 31, 35], radius: 34, alt: 8, interval: [0.8, 0.62, 0.48], flight: 1.0, peak: 6, bomb: 2.6, zone: [0, 3, 4] },
     // 착지: 플레이어 반대편 땅에 내려앉아 엎드린다 (머리 · 가슴 보석 피해 증가) — 불꽃이 하늘의 용에 닿지 않으므로 주 공격 기회
-    land: { charge: [3.8, 3.3, 2.9], descend: 2.3, far: 15, breakDmg: 80, shots: [5, 7, 9] },
+    land: { charge: [3.8, 3.3, 2.9], descend: 2.3, far: 19, breakDmg: 80, shots: [5, 7, 9] },
     // 회전 광선: 하늘에서 쏟아지는 광선이 제단 위를 구불구불 쓸고 다닌다. 지나간 자리는 불탄다
     scythe: { dur: [4.2, 4.6, 5.0], omega: 0.85, radius: 2.3, charge: 1.6 },
     roar: 3.0, // 페이즈 전환 포효 (이 동안 무적)
@@ -260,7 +260,7 @@ export const CFG = {
       tail: 0.75, // 꼬리 길이 배율
       hitK: 2.0, // 몸 판정 구 배율 (모델보다 넉넉하게)
       run: 6.4, // 걷는 속도
-      far: 13, // 이보다 멀면 다가온다
+      far: 15, // 이보다 멀면 다가온다
       near: 6.5, // 이보다 가까우면 물러난다
       gap: [2.6, 4.0], // 공격과 공격 사이
       rage: 1.12, // 한 마리가 쓰러지면 남은 한 마리의 속도 배율
@@ -274,6 +274,9 @@ export const CFG = {
       sky: { alt: 255, radius: 62, speed: 13 }, // 본체가 도는 높이 · 반경 · 속도
     },
   },
+
+  // 체력 회복 불꽃 (용의 불꽃 공격이 불을 남기는 자리에 가끔 떨어진다)
+  heal: { base: 0.12, inc: 0.1, guarantee: 7, low: 0.6, gate: 1.2, minGap: 6, maxActive: 1, life: 12, pickup: 1.6 },
 
   fx: { maxParticles: 1200 },
 } as const;
