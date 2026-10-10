@@ -8,8 +8,8 @@ export const CFG = {
   // 2층 연못 석단: 반경 약 1.33배(18→24). 뱀이 몸을 펴고 돌아다닐 수 있는 넓이 (spawnZ = 플레이어 시작 z)
   pond: { radius: 24, spawnZ: 10.8 },
   // 3층 하늘 신전 제단: 구름 바다 위에 뜬 대리석 제단. 용(몸길이 ≈ 50, 날개폭 ≈ 45)은 하늘을 선회하므로 아레나는 반경만 넓다
-  // 3층: 반경 24 → 48 (2배). 시작 위치도 넓어진 만큼 바깥쪽으로
-  peak: { radius: 48, spawnZ: 15 },
+  // 3층: 다른 보스 아레나와 비슷한 크기 (2층 연못과 같은 반경 24)
+  peak: { radius: 24, spawnZ: 11 },
 
   // 플레이어와 보스를 함께 화면에 담도록: 초점 = 플레이어×followRatio + 보스×bossRatio
   // 어깨 너머 3인칭: 플레이어 뒤·위에서 바라본다. 마우스로 시점(좌우/상하)을 돌린다.
@@ -210,8 +210,8 @@ export const CFG = {
    */
   dragon: {
     name: '겁화의 용',
-    floorLabel: '3층 · 하늘 신전',
-    maxHp: 1300, // 이전 1500 → 약 절반을 원했지만 이무기(1200)보다는 높아야 해서 1300
+    floorLabel: '3층 · 불타는 하늘 신전',
+    maxHp: 1250, // 이무기(1200)보다 살짝만 높게
     phaseAt: [0.67, 0.34],
     headMult: 1.5, // 머리 피해 배율
     bodyMult: 0.7, // 몸통
@@ -223,25 +223,31 @@ export const CFG = {
     idle: [1.7, 1.2, 0.85],
 
     sequence: [
-      ['spit', 'strafe', 'swoop', 'spit', 'strafe', 'swoop'],
-      ['meteor', 'strafe', 'crash', 'spit', 'swoop', 'meteor', 'strafe', 'crash'],
-      ['sunray', 'gale', 'strafe', 'crash', 'meteor', 'sunray', 'swoop', 'gale', 'spit', 'crash'],
+      ['spit', 'strafe', 'eruption', 'swoop', 'vortex', 'spit', 'strafe', 'swoop'],
+      ['meteor', 'strafe', 'eruption', 'crash', 'vortex', 'spit', 'swoop', 'meteor', 'scythe', 'strafe', 'crash'],
+      ['sunray', 'vortex', 'gale', 'eruption', 'strafe', 'scythe', 'crash', 'meteor', 'sunray', 'swoop', 'gale', 'scythe', 'eruption', 'crash'],
     ],
 
     // 화염탄: 입에 불을 모았다가 불덩이를 연달아 던진다. 착지 고리가 차오른다. (페이즈 2~: 바닥에 불이 남는다)
-    spit: { windup: [1.0, 0.85, 0.7], count: [3, 4, 5], gap: 0.34, flight: 1.2, peak: 9, radius: 2.9, zone: [0, 5, 6], spread: 4.6, recover: 0.9 },
+    spit: { windup: [1.0, 0.85, 0.7], count: [4, 5, 7], gap: 0.34, flight: 1.2, peak: 9, radius: 2.9, zone: [0, 5, 6], spread: 4.6, recover: 0.9 },
     // 화염 숨결 통과: 바닥에 긴 예고선 → 용이 선을 따라 낮게 날며 불을 뿜는다. 지나간 자리는 한동안 불탄다
     strafe: { tell: [1.55, 1.4, 1.25], width: 5.2, speed: [34, 38, 42], passes: [1, 2, 2], burnR: 2.7, burnLife: 2.6 },
     // 저공 돌진: 굵은 예고선 → 땅 위를 스치듯 날아오며 머리와 몸통으로 쓸어버린다
     swoop: { tell: [1.2, 1.05, 0.95], width: 6.8, speed: [44, 48, 52], passes: [1, 1, 2] },
     // 유성우 (페이즈 2~): 용이 하늘 높이 올라 포효하면 불타는 유성이 쏟아진다
-    meteor: { count: [0, 8, 12], gap: [0.3, 0.3, 0.22], tell: 1.35, radius: 3.1, zone: [0, 0, 4] },
+    meteor: { count: [0, 10, 16], gap: [0.3, 0.3, 0.22], tell: 1.35, radius: 3.1, zone: [0, 0, 4] },
     // 추락 강타 (페이즈 2~): 하늘에서 표적 위로 내리꽂아 충격파를 일으키고, 쓰러져 약점이 드러난다
     crash: { tell: [1.7, 1.7, 1.5], radius: 7.0, stun: [3.6, 3.6, 3.0], wave: 18 },
     // 태양 광선 (페이즈 3): 입가에 태양을 모아 쏜다. 광선의 조준점이 플레이어를 끈질기게 쫓는다
     sunray: { charge: 2.3, dur: 4.4, chase: 7.3, radius: 2.4, lock: 1.0 },
     // 날개 충격파 (페이즈 3): 제단 위에서 날개를 내리칠 때마다 땅을 훑는 불꽃 고리가 퍼진다
-    gale: { beats: 3, gap: 1.4, tell: 0.85, speed: 14, width: 1.5, radius: 3.8 },
+    gale: { beats: 4, gap: 1.35, tell: 0.85, speed: 14, width: 1.5, radius: 3.8 },
+    // 불기둥 연쇄: 플레이어 둘레로 나선을 그리며 연달아 불기둥이 치솟는다 (페이즈 3은 나선 두 줄)
+    eruption: { count: [7, 9, 12], gap: [0.28, 0.23, 0.18], tell: 0.95, radius: 3.2, zone: [0, 3, 4] },
+    // 불꽃 바퀴: 제단 중앙에서 뻗는 불길 줄기들이 풍차처럼 돌며 차례로 터진다. 줄기 사이 빈 쐐기로 피한다
+    vortex: { spokes: [2, 3, 4], steps: [5, 6, 8], gap: [0.62, 0.52, 0.42], tell: [1.05, 0.95, 0.85], width: 5.6, turn: 0.52 },
+    // 회전 광선: 하늘에서 쏟아지는 광선이 제단 위를 구불구불 쓸고 다닌다. 지나간 자리는 불탄다
+    scythe: { dur: [4.2, 4.6, 5.0], omega: 0.85, radius: 2.3, charge: 1.6 },
     roar: 3.0, // 페이즈 전환 포효 (이 동안 무적)
   },
 

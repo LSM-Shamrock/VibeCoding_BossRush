@@ -10,10 +10,16 @@ const V3 = THREE.Vector3;
 const D = CFG.dragon;
 const TAU = Math.PI * 2;
 
-export type AttackName = 'spit' | 'strafe' | 'swoop' | 'meteor' | 'crash' | 'sunray' | 'gale' | 'roar';
-export const SEQUENCE_ATTACKS: AttackName[] = ['spit', 'strafe', 'swoop', 'meteor', 'crash', 'sunray', 'gale'];
+export type AttackName = 'spit' | 'strafe' | 'swoop' | 'meteor' | 'crash' | 'sunray' | 'gale' | 'eruption' | 'vortex' | 'scythe' | 'roar';
+export const SEQUENCE_ATTACKS: AttackName[] = ['spit', 'strafe', 'swoop', 'meteor', 'crash', 'sunray', 'gale', 'eruption', 'vortex', 'scythe'];
 
 export function buildAttack(name: AttackName, s: Dragon): AttackScript {
+  const sc = build(name, s);
+  sc.steps.sort((a, b) => a.at - b.at); // 단계는 시간순이어야 한다
+  return sc;
+}
+
+function build(name: AttackName, s: Dragon): AttackScript {
   switch (name) {
     case 'spit':
       return spit(s);
@@ -29,6 +35,12 @@ export function buildAttack(name: AttackName, s: Dragon): AttackScript {
       return sunray(s);
     case 'gale':
       return gale(s);
+    case 'eruption':
+      return eruption(s);
+    case 'vortex':
+      return vortex(s);
+    case 'scythe':
+      return scythe(s);
     case 'roar':
       return roar(s);
   }
@@ -91,6 +103,16 @@ function spit(s: Dragon): AttackScript {
           inArena(tgt, 1.0);
         }
         s.field.lob(M, tgt, C.flight, C.peak, C.radius, C.zone[ph]);
+        // 부채꼴: 둘째 불덩이부터는 양옆으로도 한 쌍이 더 날아간다 (페이즈가 오를수록 자주)
+        if (i > 0 && i % (ph >= 2 ? 1 : 2) === 0) {
+          const px = -(tgt.z - M.z);
+          const pz = tgt.x - M.x;
+          const pl = Math.hypot(px, pz) || 1;
+          for (const sd of [-1, 1]) {
+            const f = inArena(new V3(tgt.x + (px / pl) * sd * 5.2, 0, tgt.z + (pz / pl) * sd * 5.2), 1.0);
+            s.field.lob(M, f, C.flight + 0.12, C.peak + 2, C.radius * 0.9, C.zone[ph] > 0 ? C.zone[ph] * 0.7 : 0);
+          }
+        }
         s.host.sfx.spit();
         s.host.shake(0.22, 0.05);
         s.host.fx.particles.burst(M, 0xffb040, 14, 7, 0.4, 0.2, 0.3, 2, 2);
@@ -172,6 +194,19 @@ function strafe(s: Dragon): AttackScript {
         s.setWings({ fold: 0.4, hz: 1.5, amp: 0.3 });
         s.rig.armPose = 'reach'; s.rig.legPose = 'trail';
         s.startJet(C.burnLife);
+        // 페이즈 2~: 숨결이 지나가는 길 양옆으로 유성이 곁들여 떨어진다 (선 밖으로 빠져도 방심할 수 없다)
+        if (ph >= 1) {
+          const nM = ph >= 2 ? 6 : 4;
+          for (let m = 0; m < nM; m++) {
+            const along = 34 + (m / nM) * (LEN - 40) + Math.random() * 6;
+            const side = (m % 2 ? 1 : -1) * (C.width * 0.5 + 3.5 + Math.random() * 3);
+            const mx = A.x + ux * along - uz * side;
+            const mz = A.z + uz * along + ux * side;
+            const q = inArena(new V3(mx, 0, mz), 1.5);
+            const dl = 0.15 + (m / nM) * (runDur * 0.8);
+            s.after(dl, () => s.field.meteor(q.x, q.z, 2.6, 1.05, ux, uz, 0));
+          }
+        }
         s.host.sfx.flame(runDur, 1);
         s.host.shake(0.5, 0.3);
         s.fly(
@@ -240,6 +275,16 @@ function swoop(s: Dragon): AttackScript {
         s.setWings({ fold: 0.95, hz: 0.1, amp: 0.1 });
         s.host.sfx.leap();
         s.host.shake(0.6, 0.4);
+        // 낮게 스친 길에는 불길이 남는다 (머리가 지나간 뒤 한동안 불탄다)
+        for (let d = 38; d < LEN - 22; d += 7) {
+          const dl = ((d + 4) / (LEN + 30)) * runDur + 0.08;
+          const bx = A.x + ux * d;
+          const bz = A.z + uz * d;
+          s.after(dl, () => {
+            s.field.burn(bx, bz, 2.6, 2.4 + ph * 0.5);
+            s.host.fx.particles.burst(new V3(bx, 0.8, bz), 0xff7a28, 12, 9, 0.7, 0.3, 0.8, 5, 2);
+          });
+        }
         s.fly(
           [new V3(A.x + ux * 18, 24, A.z + uz * 18), new V3(A.x + ux * 38, 5.4, A.z + uz * 38), new V3(B.x - ux * 22, 5.4, B.z - uz * 22), new V3(B.x + ux * 2, 16, B.z + uz * 2), new V3(B.x + ux * 30, 50, B.z + uz * 30)],
           runDur,
@@ -319,7 +364,25 @@ function meteor(s: Dragon): AttackScript {
       },
     });
   }
-  const tEnd = t1 + (n - 1) * gap + C.tell;
+  // 후반: 제단을 가로지르는 유성 줄 (한 줄로 쓸고 지나간다)
+  {
+    const la = Math.random() * Math.PI;
+    const lx = Math.cos(la);
+    const lz = Math.sin(la);
+    const nL = ph >= 2 ? 9 : 6;
+    const dir2 = Math.random() < 0.5 ? 1 : -1;
+    for (let k = 0; k < nL; k++) {
+      steps.push({
+        at: t1 + n * gap * 0.55 + k * 0.17,
+        fn: () => {
+          const d = ((k / (nL - 1)) * 2 - 1) * (WORLD.radius - 3) * dir2;
+          s.field.meteor(lx * d, lz * d, C.radius * 0.95, C.tell, dirX, dirZ, 0);
+          if (k % 3 === 0) s.host.sfx.telegraph();
+        },
+      });
+    }
+  }
+  const tEnd = t1 + (n - 1) * gap + C.tell + 1.0;
   steps.push({
     at: tEnd + 0.2,
     fn: () => {
@@ -391,6 +454,13 @@ function crash(s: Dragon): AttackScript {
     const { host, field, rig } = s;
     field.explode(T.x, T.z, R, true);
     field.wave(T.x, T.z, C.wave, 12, 1.5);
+    field.wave(T.x, T.z, C.wave + 4, 13, 1.2, 0.38);
+    if (ph >= 2) field.wave(T.x, T.z, C.wave + 8, 14, 1.0, 0.8);
+    for (let b = 0; b < 6; b++) {
+      const a = (b / 6) * TAU + Math.random() * 0.4;
+      const q = inArena(new V3(T.x + Math.cos(a) * (R + 2.6), 0, T.z + Math.sin(a) * (R + 2.6)), 1.2);
+      field.burn(q.x, q.z, 2.4, 3 + ph);
+    }
     host.hitStop(0.12);
     host.shake(2.4, 0.4);
     host.flash('#ffb060', 0.5, 0.5);
@@ -514,6 +584,18 @@ function sunray(s: Dragon): AttackScript {
         s.host.sfx.telegraph();
       },
     },
+    ...[0, 1, 2, 3].map((k) => ({
+      at: tFire + 0.7 + k * 1.0,
+      fn: () => {
+        const q = ahead(s, 0.6);
+        const a = Math.random() * TAU;
+        q.x += Math.cos(a) * 6.5;
+        q.z += Math.sin(a) * 6.5;
+        inArena(q, 1.2);
+        s.field.meteor(q.x, q.z, 2.8, 1.15, Math.cos(a), Math.sin(a), 0);
+        s.host.sfx.telegraph();
+      },
+    })),
     {
       at: tFire + C.dur + 0.15,
       fn: () => {
@@ -572,6 +654,7 @@ function gale(s: Dragon): AttackScript {
     s.rig.armPose = 'brace'; s.rig.legPose = 'brace';
     field.explode(0, 0, C.radius, true);
     field.wave(0, 0, WORLD.radius + 8, C.speed, C.width);
+    field.wave(0, 0, WORLD.radius + 8, C.speed, C.width * 0.8, 0.42);
     if (finale) field.wave(0, 0, WORLD.radius + 8, C.speed * 1.2, C.width, 0.32);
     host.shake(1.6, 0.35);
     host.sfx.wingbeat(1.8);
@@ -597,6 +680,250 @@ function gale(s: Dragon): AttackScript {
     },
   });
   return { steps, end: tEnd + 2.0 };
+}
+
+/* ───────────────────────── 불기둥 연쇄 ─────────────────────────
+ * 용이 하늘 높이서 포효하면 플레이어가 서 있던 자리 둘레로 나선을 그리며 바닥이 차례로 갈라져 불기둥이 치솟는다.
+ * 고리가 차오르는 동안 벗어나면 되지만, 다음 고리가 또 앞을 막는다. (페이즈 3은 나선 두 줄)
+ */
+function eruption(s: Dragon): AttackScript {
+  const ph = s.phaseIndex;
+  const C = D.eruption;
+  const n = C.count[ph];
+  const gap = C.gap[ph];
+  const R = C.radius;
+  const t1 = 1.5;
+  const arms = ph >= 2 ? 2 : 1;
+  const spin = Math.random() < 0.5 ? 1 : -1;
+  const a0 = Math.random() * TAU;
+  const c = new V3();
+  const steps: Step[] = [
+    {
+      at: 0,
+      fn: () => {
+        c.copy(ahead(s, 0.5));
+        s.look('player');
+        s.rig.jaw = 0.9;
+        s.rig.fire = 0.8;
+        s.setWings({ hz: 0.9, amp: 0.7, raise: 0.5 });
+        s.rig.armPose = 'roar'; s.rig.legPose = 'roar';
+        s.cruiseOverride = { alt: 42, radius: 11 };
+        s.host.sfx.roar();
+        s.host.banner('불기둥', '발밑이 갈라진다 — 고리가 차기 전에 벗어나라', 1.8);
+        s.host.skyPulse?.(0.8);
+        s.host.shake(0.5, 0.3);
+      },
+    },
+  ];
+  for (let i = 0; i < n; i++) {
+    for (let arm = 0; arm < arms; arm++) {
+      steps.push({
+        at: t1 + i * gap,
+        fn: () => {
+          // 바깥에서 안쪽으로 조여 들어오는 나선. 마지막 몇 개는 중심을 직접 겨눈다
+          const k = i / Math.max(1, n - 1);
+          const rad = 11.5 * (1 - k) + 1.2;
+          const a = a0 + spin * i * 0.78 + arm * Math.PI;
+          const q = inArena(new V3(c.x + Math.cos(a) * rad, 0, c.z + Math.sin(a) * rad), 1.2);
+          if (i >= n - 2 && arm === 0) q.copy(ahead(s, 0.3));
+          s.host.fx.telegraphs.circle(q.x, q.z, R, C.tell, () => {
+            s.field.explode(q.x, q.z, R, true);
+            if (C.zone[ph] > 0) s.field.burn(q.x, q.z, R * 0.8, C.zone[ph]);
+            s.host.fx.particles.burst(new V3(q.x, 1.2, q.z), 0xff7a28, 36, 14, 1.1, 0.3, 1.2, 6, 2); // 위로 솟는 불기둥
+            s.host.fx.particles.burst(new V3(q.x, 0.6, q.z), 0xffe0a0, 14, 8, 0.8, 0.2, 1.4, 4, 2);
+            s.host.fx.ring(q.x, q.z, R * 1.7, 0.5, 0xffb060);
+          });
+          if (i % 2 === 0) s.host.sfx.telegraph();
+        },
+      });
+    }
+  }
+  const tEnd = t1 + (n - 1) * gap + C.tell;
+  steps.push({
+    at: tEnd + 0.3,
+    fn: () => {
+      s.rig.fire = 0;
+      s.rig.jaw = 0.1;
+      s.look('off');
+      s.cruiseOverride = null;
+      s.rig.armPose = 'tuck'; s.rig.legPose = 'trail';
+    },
+  });
+  return { steps, end: tEnd + 1.5 };
+}
+
+/* ───────────────────────── 불꽃 바퀴 ─────────────────────────
+ * 제단 한가운데에서 뻗은 불길 줄기들이 풍차처럼 돌며 차례로 터진다. 줄기 사이 빈 쐐기로 계속 옮겨 다니며 피한다.
+ */
+function vortex(s: Dragon): AttackScript {
+  const ph = s.phaseIndex;
+  const C = D.vortex;
+  const n = C.spokes[ph];
+  const nSteps = C.steps[ph];
+  const gap = C.gap[ph];
+  const tell = C.tell[ph];
+  const W = C.width;
+  const t1 = 1.7;
+  const base = Math.random() * TAU;
+  const dir0 = Math.random() < 0.5 ? 1 : -1;
+  const L = WORLD.radius - 0.4;
+  const steps: Step[] = [
+    {
+      at: 0,
+      fn: () => {
+        s.look('off');
+        s.rig.jaw = 0.8;
+        s.rig.fire = 0.9;
+        s.setWings({ hz: 0.8, amp: 0.6, raise: 0.6, spread: 1 });
+        s.rig.armPose = 'gather'; s.rig.legPose = 'roar';
+        s.cruiseOverride = { alt: 40, radius: 7 };
+        s.host.sfx.roar();
+        s.host.banner('불꽃 바퀴', '불길 줄기가 돈다 — 줄기 사이 빈 곳으로', 1.8);
+        s.host.skyPulse?.(0.9);
+        s.host.fx.ring(0, 0, 8, 0.8, 0xff7a3a);
+      },
+    },
+  ];
+  let ang = base;
+  for (let k = 0; k < nSteps; k++) {
+    // 후반 절반은 돌아가는 방향이 뒤집힌다 (페이즈 2~)
+    const dir = ph >= 1 && k >= Math.ceil(nSteps / 2) ? -dir0 : dir0;
+    ang += dir * C.turn * (k === 0 ? 0 : 1);
+    const a0 = ang;
+    steps.push({
+      at: t1 + k * gap,
+      fn: () => {
+        for (let j = 0; j < n; j++) {
+          const a = a0 + (j / n) * TAU;
+          const ux = Math.cos(a);
+          const uz = Math.sin(a);
+          s.host.fx.telegraphs.line(0, 0, a, L, W, tell, () => {
+            for (let q = 0; q < 5; q++) {
+              const dd = 2.4 + (q * (L - 3.6)) / 4;
+              const x = ux * dd;
+              const z = uz * dd;
+              s.host.fx.particles.burst(new V3(x, 1.0, z), 0xff7a28, 14, 11, 0.9, 0.3, 1.1, 6, 2);
+              s.host.fx.burstLight(new V3(x, 2, z), 0xff8030, 80, 0.35);
+              s.host.fx.ring(x, z, W * 0.65, 0.4, 0xffb060);
+              if (ph >= 1 && q % 2 === 1) s.field.burn(x, z, W * 0.4, 1.5);
+            }
+            if (j === 0) {
+              s.host.sfx.explosion(true);
+              s.host.shake(0.7, 0.2);
+            }
+            const pl = s.player;
+            if (!pl.dead) {
+              const proj = pl.pos.x * ux + pl.pos.z * uz;
+              const perp = Math.abs(-pl.pos.x * uz + pl.pos.z * ux);
+              if (proj > -1.2 && proj < L + 1 && perp < W * 0.5 + pl.hitRadius) pl.takeDamage(ux * Math.max(0, proj), uz * Math.max(0, proj));
+            }
+          });
+        }
+        s.host.sfx.telegraph();
+      },
+    });
+  }
+  const tEnd = t1 + (nSteps - 1) * gap + tell;
+  steps.push({
+    at: tEnd + 0.3,
+    fn: () => {
+      s.rig.fire = 0;
+      s.rig.jaw = 0.1;
+      s.cruiseOverride = null;
+      s.rig.armPose = 'tuck'; s.rig.legPose = 'trail';
+      s.setWings({ hz: 1.0, amp: 0.6, raise: 0.15 });
+    },
+  });
+  return { steps, end: tEnd + 1.5 };
+}
+
+/* ───────────────────────── 회전 광선 ─────────────────────────
+ * 용이 제단 한가운데 하늘에서 입가에 빛을 모으고, 광선의 끝이 제단 위를 구불구불 쓸고 다닌다.
+ * 지나간 자리는 불타오른다. 광선 끝이 다가오면 반경 방향으로 비켜서면 된다. (대시도 가능)
+ */
+function scythe(s: Dragon): AttackScript {
+  const ph = s.phaseIndex;
+  const C = D.scythe;
+  const dur = C.dur[ph];
+  const charge = C.charge;
+  const dir = Math.random() < 0.5 ? 1 : -1;
+  const T = new V3();
+  const M = new V3();
+  const last = new V3(1e5, 0, 1e5);
+  let a0 = 0;
+  let phase0 = 0;
+  let tt = 0;
+  const pos = (u: number, out: THREE.Vector3) => {
+    const a = a0 + dir * C.omega * u;
+    const r = 11.5 + 7.5 * Math.sin(1.55 * u + phase0);
+    return out.set(Math.cos(a) * r, 0, Math.sin(a) * r);
+  };
+  const steps: Step[] = [
+    {
+      at: 0,
+      fn: () => {
+        const pl = s.player.pos;
+        // 플레이어가 서 있는 쪽에서 광선이 시작해 반대로 휘돈다
+        a0 = Math.atan2(pl.z, pl.x) - dir * 0.9;
+        phase0 = Math.random() * TAU;
+        s.look('player');
+        s.rig.jaw = 0.95;
+        s.rig.fire = 1;
+        s.setWings({ hz: 0.7, amp: 0.4, raise: 0.8, spread: 1 });
+        s.rig.armPose = 'gather'; s.rig.legPose = 'roar';
+        s.fly([new V3(0, 40, 0)], 1.3, 'io', () => s.hoverAt(new V3(0, 40, 0), 3, null, 0.2));
+        s.host.sfx.sunCharge(charge);
+        s.host.banner('회전 광선', '광선 끝이 휘돈다 — 비켜서라', 1.8);
+        s.host.skyPulse?.(1);
+        pos(0, T);
+        s.host.fx.telegraphs.circle(T.x, T.z, C.radius + 0.9, charge, () => {});
+        s.host.sfx.telegraph();
+      },
+    },
+    {
+      at: 0.4,
+      fn: () => {
+        s.onTick((dt) => {
+          tt += dt;
+          s.mouthPos(M);
+          const k = Math.min(1, tt / charge);
+          if (tt < charge) {
+            s.rig.headForward(T);
+            M.addScaledVector(T, 2.4 + 1.6 * k);
+            s.field.charge(M, k);
+            s.host.shake(0.08 + 0.25 * k, 0.05);
+            return;
+          }
+          const u = tt - charge;
+          if (u > dur) return;
+          pos(u, T);
+          const fade = Math.min(1, u / 0.3) * Math.min(1, (dur - u) / 0.45);
+          s.field.ray(M, T, Math.max(0, fade));
+          s.look('point', T);
+          s.host.shake(0.35 * fade, 0.04);
+          const pl = s.player;
+          if (!pl.dead && fade > 0.3 && Math.hypot(pl.pos.x - T.x, pl.pos.z - T.z) < C.radius + pl.hitRadius) pl.takeDamage(T.x, T.z);
+          if (Math.hypot(T.x - last.x, T.z - last.z) > 2.4) {
+            s.field.burn(T.x, T.z, C.radius * 0.9, 2.3);
+            last.copy(T);
+          }
+        });
+      },
+    },
+    {
+      at: charge + dur + 0.2,
+      fn: () => {
+        s.rig.fire = 0;
+        s.rig.jaw = 0.1;
+        s.look('off');
+        s.setWings({ hz: 0.9, amp: 0.6, raise: 0.15 });
+        s.rig.armPose = 'tuck'; s.rig.legPose = 'trail';
+        s.host.fx.burstLight(T.clone().setY(2), 0xffd9a0, 200, 0.5);
+        s.field.explode(T.x, T.z, 3.2, true);
+      },
+    },
+  ];
+  return { steps, end: charge + dur + 1.7 };
 }
 
 /* ───────────────────────── 페이즈 전환 포효 ─────────────────────────

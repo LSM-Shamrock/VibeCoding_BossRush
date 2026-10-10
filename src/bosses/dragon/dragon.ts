@@ -649,6 +649,20 @@ export class Dragon implements Boss {
     this.ticks.push(fn);
   }
 
+  /** 공격 중 delay 초 뒤에 한 번 실행한다 (공격이 끝나면 취소) */
+  after(delay: number, fn: () => void) {
+    let t = 0;
+    let done = false;
+    this.onTick((dt) => {
+      if (done) return;
+      t += dt;
+      if (t >= delay) {
+        done = true;
+        fn();
+      }
+    });
+  }
+
   private endAttack() {
     this.script = null;
     this.ticks = [];

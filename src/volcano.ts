@@ -13,14 +13,14 @@ const R = CFG.peak.radius;
 const LAVA_Y = -3.2; // 구름 바다의 높이
 
 export const VOLC = {
-  fog: 0xb4d4ee,
-  fogDensity: 0.0026,
-  hemiSky: 0xcfe6ff,
-  hemiGround: 0xb8c4d6,
-  hemiIntensity: 0.95,
-  sun: 0xfff0d2,
-  sunIntensity: 2.0,
-  sunPos: [-26, 48, 18] as [number, number, number],
+  fog: 0x1a0b10,
+  fogDensity: 0.0052,
+  hemiSky: 0x40406a,
+  hemiGround: 0x5a1c14,
+  hemiIntensity: 0.8,
+  sun: 0xff7a4a,
+  sunIntensity: 1.25,
+  sunPos: [-34, 30, 26] as [number, number, number],
 };
 
 function mulberry32(seed: number) {
@@ -47,18 +47,19 @@ function tex(cv: HTMLCanvasElement, srgb = true) {
   return t;
 }
 
-/** 하늘 돔 텍스처 (등장방형): 맑게 갠 낮 하늘 — 위는 짙은 파랑, 지평선은 하얗게 흐려지고, 뭉게구름이 떠 있다 */
+/** 하늘 돔 텍스처 (등장방형): 폭풍 전야 — 위는 거의 검은 남보라, 지평선 쪽은 핏빛으로 타오르고, 검은 먹구름이 붉은 테두리로 깔려 있다 */
 function makeSky(rand: () => number) {
   const W = 1024;
   const H = 512;
   const { cv, g } = canvas(W, H);
   const gr = g.createLinearGradient(0, 0, 0, H);
-  gr.addColorStop(0, '#1d5fc4');
-  gr.addColorStop(0.2, '#2f7fd8');
-  gr.addColorStop(0.38, '#6fb0ea');
-  gr.addColorStop(0.49, '#aed3f0');
-  gr.addColorStop(0.53, '#bcdaf1');
-  gr.addColorStop(1, '#bcdaf1');
+  gr.addColorStop(0, '#04050c');
+  gr.addColorStop(0.22, '#0a0b1a');
+  gr.addColorStop(0.38, '#1c1224');
+  gr.addColorStop(0.46, '#4a1618');
+  gr.addColorStop(0.5, '#8a2a14');
+  gr.addColorStop(0.53, '#2a0e0e');
+  gr.addColorStop(1, '#120708');
   g.fillStyle = gr;
   g.fillRect(0, 0, W, H);
   const puff = (x: number, y: number, r: number, squash: number, rgb: string, a: number) => {
@@ -76,56 +77,56 @@ function makeSky(rand: () => number) {
       g.restore();
     }
   };
-  // 뭉게구름: 아래가 살짝 회청색으로 그늘진 하얀 덩어리 무리. 지평선 쪽일수록 납작하고 촘촘하다
-  for (let c = 0; c < 17; c++) {
+  // 지평선의 붉은 불길 띠
+  for (let i = 0; i < 40; i++) puff(rand() * W, H * (0.47 + rand() * 0.05), 60 + rand() * 90, 0.18, '255,90,30', 0.22 + rand() * 0.2);
+  // 먹구름: 검은 덩어리 + 아래는 지평선의 붉은 빛을 받는다
+  for (let c = 0; c < 26; c++) {
     const cx = rand() * W;
-    const cy = H * (0.2 + rand() * 0.27);
-    const size = 0.7 + rand() * 0.9;
+    const cy = H * (0.14 + rand() * 0.34);
+    const size = 0.8 + rand() * 1.1;
     const n = 7 + Math.floor(rand() * 7);
     const pts: [number, number, number][] = [];
     for (let i = 0; i < n; i++) {
       const k = (i / (n - 1)) * 2 - 1;
-      pts.push([cx + k * 70 * size + (rand() - 0.5) * 24, cy + (rand() - 0.5) * 9 * size - (1 - Math.abs(k)) * 9 * size, (20 + rand() * 24) * size * (1 - Math.abs(k) * 0.35)]);
+      pts.push([cx + k * 80 * size + (rand() - 0.5) * 28, cy + (rand() - 0.5) * 10 * size - (1 - Math.abs(k)) * 10 * size, (22 + rand() * 26) * size * (1 - Math.abs(k) * 0.35)]);
     }
-    for (const [x, y, r] of pts) puff(x, y + r * 0.35, r * 1.05, 0.62, '150,176,208', 0.34);
-    for (const [x, y, r] of pts) puff(x, y, r, 0.72, '255,255,255', 0.92);
-    for (const [x, y, r] of pts) puff(x - r * 0.12, y - r * 0.22, r * 0.55, 0.7, '255,255,255', 0.5);
+    const low = cy / H > 0.36 ? 1 : 0.4;
+    for (const [x, y, r] of pts) puff(x, y + r * 0.4, r * 1.05, 0.62, '170,52,24', 0.3 * low);
+    for (const [x, y, r] of pts) puff(x, y, r, 0.72, '14,12,22', 0.93);
+    for (const [x, y, r] of pts) puff(x - r * 0.1, y - r * 0.22, r * 0.5, 0.7, '44,40,64', 0.4);
   }
   // 높은 곳의 가는 구름결
-  for (let i = 0; i < 22; i++) {
-    const x = rand() * W;
-    const y = H * (0.06 + rand() * 0.16);
-    puff(x, y, 70 + rand() * 90, 0.09, '255,255,255', 0.2 + rand() * 0.15);
-  }
+  for (let i = 0; i < 20; i++) puff(rand() * W, H * (0.05 + rand() * 0.15), 80 + rand() * 90, 0.09, '60,56,90', 0.2 + rand() * 0.15);
   return tex(cv);
 }
 
-/** 해: 둥근 원반과 부드러운 빛번짐 */
+/** 하늘의 불길한 붉은 달(일식): 어두운 원반 둘레의 핏빛 후광 */
 function makeSunTex(core: boolean) {
   const S = 256;
   const { cv, g } = canvas(S);
   const gg = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
   if (core) {
-    gg.addColorStop(0, 'rgba(255,255,250,1)');
-    gg.addColorStop(0.5, 'rgba(255,252,235,0.98)');
-    gg.addColorStop(0.62, 'rgba(255,244,205,0.5)');
-    gg.addColorStop(1, 'rgba(255,240,200,0)');
+    gg.addColorStop(0, 'rgba(255,120,60,0.0)');
+    gg.addColorStop(0.5, 'rgba(255,100,40,0.0)');
+    gg.addColorStop(0.58, 'rgba(255,110,50,0.95)');
+    gg.addColorStop(0.7, 'rgba(255,70,30,0.35)');
+    gg.addColorStop(1, 'rgba(255,60,20,0)');
   } else {
-    gg.addColorStop(0, 'rgba(255,248,220,0.55)');
-    gg.addColorStop(0.25, 'rgba(255,240,200,0.28)');
-    gg.addColorStop(0.6, 'rgba(255,232,190,0.08)');
-    gg.addColorStop(1, 'rgba(255,230,180,0)');
+    gg.addColorStop(0, 'rgba(255,80,40,0.35)');
+    gg.addColorStop(0.3, 'rgba(255,60,30,0.2)');
+    gg.addColorStop(0.65, 'rgba(200,40,20,0.06)');
+    gg.addColorStop(1, 'rgba(160,30,10,0)');
   }
   g.fillStyle = gg;
   g.fillRect(0, 0, S, S);
   return tex(cv);
 }
 
-/** 구름 바다: 신전 아래로 끝없이 펼쳐진 하얀 구름층 */
+/** 구름 바다: 신전 아래로 깔린 시커먼 폭풍 구름, 군데군데 아래에서 붉게 번뜩인다 */
 function makeLava(rand: () => number) {
   const S = 512;
   const { cv, g } = canvas(S);
-  g.fillStyle = '#dbe9f6';
+  g.fillStyle = '#17090c';
   g.fillRect(0, 0, S, S);
   for (let i = 0; i < 380; i++) {
     const x = rand() * S;
@@ -133,8 +134,8 @@ function makeLava(rand: () => number) {
     const r = 14 + rand() * 46;
     const gg = g.createRadialGradient(x, y, 0, x, y, r);
     const b = rand();
-    gg.addColorStop(0, b < 0.55 ? 'rgba(255,255,255,0.85)' : 'rgba(168,196,226,0.55)');
-    gg.addColorStop(1, 'rgba(219,233,246,0)');
+    gg.addColorStop(0, b < 0.62 ? 'rgba(48,36,46,0.8)' : b < 0.9 ? 'rgba(10,6,10,0.8)' : 'rgba(210,64,24,0.5)');
+    gg.addColorStop(1, 'rgba(23,9,12,0)');
     for (const ox of [-S, 0, S]) for (const oy of [-S, 0, S]) {
       g.fillStyle = gg;
       g.fillRect(x + ox - r, y + oy - r, r * 2, r * 2);
@@ -153,12 +154,12 @@ function makeAltar(rand: () => number) {
   const glow = canvas(S);
   const g = base.g;
   const e = glow.g;
-  g.fillStyle = '#a49c8a';
+  g.fillStyle = '#2c2826';
   g.fillRect(0, 0, S, S);
   e.fillStyle = '#000';
   e.fillRect(0, 0, S, S);
   const px = S / (R * 2);
-  const bands = [0, 4.5, 9, 14, 19, 28, 38, R];
+  const bands = [0, 4.5, 9, 14, 19, R];
   for (let b = 0; b < bands.length - 1; b++) {
     const r0 = bands[b] * px;
     const r1 = bands[b + 1] * px;
@@ -166,7 +167,7 @@ function makeAltar(rand: () => number) {
     for (let i = 0; i < n; i++) {
       const a0 = (i / n) * TAU + b * 0.2;
       const a1 = ((i + 1) / n) * TAU + b * 0.2;
-      const sh = 168 + Math.floor(rand() * 34);
+      const sh = 54 + Math.floor(rand() * 26);
       g.fillStyle = `rgb(${sh},${sh - 4},${sh - 14})`;
       g.beginPath();
       g.arc(c, c, r1, a0 + 0.012, a1 - 0.012);
@@ -177,7 +178,7 @@ function makeAltar(rand: () => number) {
       for (let k = 0; k < 4; k++) {
         const am = a0 + (a1 - a0) * rand();
         const rm = r0 + (r1 - r0) * rand();
-        g.strokeStyle = 'rgba(110,104,96,0.35)';
+        g.strokeStyle = 'rgba(20,18,18,0.45)';
         g.lineWidth = 1.5;
         g.beginPath();
         g.moveTo(c + Math.cos(am) * rm, c + Math.sin(am) * rm);
@@ -185,7 +186,7 @@ function makeAltar(rand: () => number) {
         g.stroke();
       }
       // 판석 이음매: 어두운 선 + 금빛 상감(발광 층)
-      g.strokeStyle = 'rgba(70,64,56,0.75)';
+      g.strokeStyle = 'rgba(8,6,6,0.85)';
       g.lineWidth = 3;
       g.beginPath();
       g.arc(c, c, r1 - 1, a0 + 0.012, a1 - 0.012);
@@ -195,7 +196,7 @@ function makeAltar(rand: () => number) {
       g.lineTo(c + Math.cos(a0) * r1, c + Math.sin(a0) * r1);
       g.stroke();
       if (b % 2 === 1 || b === 4) {
-        e.strokeStyle = 'rgba(255,200,90,0.55)';
+        e.strokeStyle = 'rgba(255,100,36,0.6)';
         e.lineWidth = 2;
         e.beginPath();
         e.arc(c, c, r1 - 1, a0 + 0.012, a1 - 0.012);
@@ -209,7 +210,7 @@ function makeAltar(rand: () => number) {
     let y = c + (rand() - 0.5) * S * 0.9;
     if (Math.hypot(x - c, y - c) > R * px - 20) continue;
     let a = rand() * TAU;
-    g.strokeStyle = 'rgba(60,54,48,0.7)';
+    g.strokeStyle = 'rgba(6,4,4,0.8)';
     g.lineWidth = 3;
     g.beginPath();
     g.moveTo(x, y);
@@ -230,12 +231,12 @@ function makeAltar(rand: () => number) {
     e.arc(c, c, r * px, 0, TAU);
     e.stroke();
   };
-  ring(3.2, 7, 'rgba(255,190,70,0.95)');
-  ring(3.9, 2.5, 'rgba(255,236,170,0.95)');
-  ring(8.2, 5, 'rgba(255,190,70,0.8)');
+  ring(3.2, 7, 'rgba(255,96,34,0.95)');
+  ring(3.9, 2.5, 'rgba(255,170,90,0.95)');
+  ring(8.2, 5, 'rgba(255,96,34,0.8)');
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * TAU;
-    e.fillStyle = 'rgba(255,200,90,0.9)';
+    e.fillStyle = 'rgba(255,110,40,0.9)';
     e.beginPath();
     e.moveTo(c + Math.cos(a - 0.12) * 4.3 * px, c + Math.sin(a - 0.12) * 4.3 * px);
     e.lineTo(c + Math.cos(a) * 8.0 * px, c + Math.sin(a) * 8.0 * px);
@@ -246,7 +247,7 @@ function makeAltar(rand: () => number) {
   // 가장자리 룬 띠
   for (let i = 0; i < 48; i++) {
     const a = (i / 48) * TAU;
-    e.strokeStyle = 'rgba(255,200,90,0.8)';
+    e.strokeStyle = 'rgba(255,110,40,0.8)';
     e.lineWidth = 4;
     e.beginPath();
     e.moveTo(c + Math.cos(a) * (R - 2.4) * px, c + Math.sin(a) * (R - 2.4) * px);
@@ -273,6 +274,9 @@ export class Volcano {
   private farTemple: THREE.Group;
   private flare = 0;
   private flareT = 5;
+  private bolt = 0; // 번개 번쩍임 0~1
+  private boltT = 3;
+  private boltQueue = 0;
 
   constructor(scene: THREE.Scene) {
     const rand = mulberry32(31337);
@@ -295,8 +299,8 @@ export class Volcano {
       root.add(sp);
       return sp;
     };
-    this.sunGlow = mkSun(false, 720);
-    this.sunDisc = mkSun(true, 110);
+    this.sunGlow = mkSun(false, 620);
+    this.sunDisc = mkSun(true, 150);
 
     /* 구름 바다 */
     this.lavaTex = makeLava(rand);
@@ -307,9 +311,9 @@ export class Volcano {
     root.add(lava);
 
     /* 제단: 계단 세 단 위의 대리석 바닥 */
-    const marble = new THREE.MeshStandardMaterial({ color: 0xe8e1d2, roughness: 0.75, metalness: 0.02, flatShading: true });
+    const marble = new THREE.MeshStandardMaterial({ color: 0x5a524c, roughness: 0.8, metalness: 0.02, flatShading: true });
     const alt = makeAltar(rand);
-    this.altarMat = new THREE.MeshStandardMaterial({ map: alt.map, emissiveMap: alt.glow, emissive: 0xffc860, emissiveIntensity: 0.3, roughness: 0.6, metalness: 0.08 });
+    this.altarMat = new THREE.MeshStandardMaterial({ map: alt.map, emissiveMap: alt.glow, emissive: 0xff5a22, emissiveIntensity: 0.45, roughness: 0.6, metalness: 0.08 });
     const floor = new THREE.Mesh(new THREE.CircleGeometry(R, 96).rotateX(-Math.PI / 2), this.altarMat);
     floor.receiveShadow = true;
     root.add(floor);
@@ -320,11 +324,11 @@ export class Volcano {
       root.add(step);
     }
     // 아래로 좁아지는 기단
-    const side = new THREE.Mesh(new THREE.CylinderGeometry(R + 5, R * 0.45, 22, 48, 1, true), new THREE.MeshStandardMaterial({ color: 0xcfc6b2, roughness: 0.9, flatShading: true, side: THREE.DoubleSide }));
+    const side = new THREE.Mesh(new THREE.CylinderGeometry(R + 5, R * 0.45, 22, 48, 1, true), new THREE.MeshStandardMaterial({ color: 0x3a322e, roughness: 0.9, flatShading: true, side: THREE.DoubleSide }));
     side.position.y = -14;
     root.add(side);
     // 가장자리 금빛 테두리
-    this.rimMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 0.8, 0.35), transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+    this.rimMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 0.3, 0.1), transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
     const rim = new THREE.Mesh(new THREE.RingGeometry(R - 0.45, R + 0.05, 96).rotateX(-Math.PI / 2), this.rimMat);
     rim.position.y = 0.03;
     root.add(rim);
@@ -333,7 +337,7 @@ export class Volcano {
     const colGeo = new THREE.CylinderGeometry(1, 1.12, 1, 14, 1).translate(0, 0.5, 0);
     const capGeo = new THREE.BoxGeometry(1, 1, 1);
     const NC = 14;
-    const RC = 150; // 아레나(48)와 용이 선회하는 범위 밖 — 몸통이 기둥을 뚫지 않게 멀리
+    const RC = 118; // 용이 선회하는 범위(≈50) 밖 — 몸통이 기둥을 뚫지 않게 멀리 — 몸통이 기둥을 뚫지 않게 멀리
     const cols = new THREE.InstancedMesh(colGeo, marble, NC * 3);
     const caps = new THREE.InstancedMesh(capGeo, marble, NC * 3);
     const o = new THREE.Object3D();
@@ -377,7 +381,7 @@ export class Volcano {
     const stumps = new THREE.InstancedMesh(colGeo, marble, 60);
     for (let i = 0; i < 60; i++) {
       const a = rand() * TAU;
-      const d = 190 + Math.pow(rand(), 0.8) * 230;
+      const d = 135 + Math.pow(rand(), 0.8) * 150;
       const h = 20 + rand() * 70;
       o.position.set(Math.cos(a) * d, LAVA_Y - 4, Math.sin(a) * d);
       o.scale.set(4 + rand() * 4, h, 4 + rand() * 4);
@@ -392,7 +396,7 @@ export class Volcano {
     for (let i = 0; i < 16; i++) {
       const m = new THREE.Mesh(rockGeo, marble);
       const a = rand() * TAU;
-      const d = 110 + rand() * 130;
+      const d = 85 + rand() * 90;
       const sc = 3 + rand() * 8;
       m.scale.set(sc, sc * (0.6 + rand() * 0.5), sc);
       m.position.set(Math.cos(a) * d, 4 + rand() * 40, Math.sin(a) * d);
@@ -402,7 +406,7 @@ export class Volcano {
 
     /* 먼 하늘의 큰 신전: 계단 · 열주 · 삼각 지붕 */
     const far = new THREE.Group();
-    const farMat = new THREE.MeshStandardMaterial({ color: 0xece6d8, roughness: 0.9, flatShading: true });
+    const farMat = new THREE.MeshStandardMaterial({ color: 0x453d38, roughness: 0.9, flatShading: true });
     const fb = new THREE.Mesh(new THREE.BoxGeometry(190, 12, 80), farMat);
     fb.position.y = 6;
     far.add(fb);
@@ -422,14 +426,13 @@ export class Volcano {
     roof.position.y = 106;
     roof.scale.set(1, 0.5, 1);
     far.add(roof);
-    far.position.set(-320, -4, -460);
-    far.scale.setScalar(1.4);
+    far.position.set(-230, -4, -330);
     far.rotation.y = 0.5;
     this.farTemple = far;
     root.add(far);
 
     /* 불씨: 플레이어 주변 상자 안에서 떠오른다 */
-    const N = 320;
+    const N = 520;
     const pos = new Float32Array(N * 3);
     this.emberSpeed = new Float32Array(N);
     for (let i = 0; i < N; i++) {
@@ -442,7 +445,7 @@ export class Volcano {
     eg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     this.embers = new THREE.Points(
       eg,
-      new THREE.PointsMaterial({ color: new THREE.Color(1.6, 1.3, 0.7), size: 0.26, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
+      new THREE.PointsMaterial({ color: new THREE.Color(1.8, 0.55, 0.18), size: 0.3, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
     );
     this.embers.frustumCulled = false;
     root.add(this.embers);
@@ -450,7 +453,7 @@ export class Volcano {
     /* 가장자리 용암빛 점광원 (플레이어·용을 붉게 물들인다) */
     for (let i = 0; i < 5; i++) {
       const a = (i / 5) * TAU + 0.3;
-      const l = new THREE.PointLight(0xffd9a0, 6, 30, 1.5);
+      const l = new THREE.PointLight(0xff4a22, 7, 30, 1.5);
       l.position.set(Math.cos(a) * (R - 1.5), 1.2, Math.sin(a) * (R - 1.5));
       root.add(l);
       this.lights.push({ l, base: 6, ph: rand() * TAU });
@@ -472,13 +475,27 @@ export class Volcano {
       this.flareT = 6 + Math.random() * 8;
     }
     this.flare = Math.max(0, this.flare - dt * 0.9);
+    // 번개: 가끔 하늘 전체가 두 번 번쩍인다
+    this.boltT -= dt;
+    if (this.boltT < 0) {
+      this.bolt = 1;
+      this.boltQueue = Math.random() < 0.6 ? 1 : 0;
+      this.boltT = 3.5 + Math.random() * 6;
+    }
+    this.bolt = Math.max(0, this.bolt - dt * 5.5);
+    if (this.bolt <= 0 && this.boltQueue > 0) {
+      this.boltQueue--;
+      this.bolt = 0.8;
+    }
+    const lk = 1 + this.bolt * 3.2 + this.flare * 0.5;
+    (this.sky.material as THREE.MeshBasicMaterial).color.setRGB(0.95 * lk, 0.92 * lk, 1.0 * lk);
     const pulse = 0.5 + 0.5 * Math.sin(t * 1.3);
-    this.altarMat.emissiveIntensity = 0.28 + 0.1 * pulse + this.flare * 0.5;
-    this.rimMat.color.setRGB(1, 0.8, 0.35).multiplyScalar(1.1 + 0.4 * pulse);
-    this.lavaMat.color.setRGB(1 + this.flare * 0.15, 1 + this.flare * 0.12, 1);
+    this.altarMat.emissiveIntensity = 0.4 + 0.15 * pulse + this.flare * 0.7;
+    this.rimMat.color.setRGB(1, 0.32, 0.1).multiplyScalar(1.1 + 0.5 * pulse + this.flare * 0.6);
+    this.lavaMat.color.setRGB(1 + this.flare * 0.5 + this.bolt * 1.4, 1 + this.flare * 0.2 + this.bolt * 1.3, 1 + this.bolt * 1.5);
     for (const li of this.lights) {
       const f = 0.88 + 0.12 * Math.sin(t * 9 + li.ph) + 0.06 * Math.sin(t * 23 + li.ph * 2);
-      li.l.intensity = li.base * f * (1 + this.flare * 0.5);
+      li.l.intensity = li.base * f * (1 + this.flare * 0.5 + this.bolt * 1.5);
     }
     for (const r of this.rocks) {
       r.m.position.y = r.y0 + Math.sin(t * 0.4 + r.ph) * 1.2;
@@ -488,7 +505,7 @@ export class Volcano {
     this.sky.position.set(fx, 0, fz);
     this.sky.rotation.y += dt * 0.004;
     for (const sp of [this.sunDisc, this.sunGlow]) sp.position.set(fx + this.sunDir.x * 1000, this.sunDir.y * 1000, fz + this.sunDir.z * 1000);
-    (this.sunGlow.material as THREE.SpriteMaterial).opacity = 0.55 + this.flare * 0.15;
+    (this.sunGlow.material as THREE.SpriteMaterial).opacity = 0.6 + this.flare * 0.3;
 
     const a = this.embers.geometry.getAttribute('position') as THREE.BufferAttribute;
     for (let i = 0; i < a.count; i++) {
