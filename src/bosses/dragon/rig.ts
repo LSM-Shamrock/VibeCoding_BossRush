@@ -36,6 +36,8 @@ const IW = at(0.18);
 const IH = at(0.434);
 const IFL = at(0.229);
 const IHL = at(0.37); // 뒷다리를 더 앞쪽(머리 쪽)에 단다
+/** 수직 자세에서 곧게 내려가는 기둥의 끝(앞다리 바로 뒤) 마디 */
+const IC = IFL + 8;
 /** 날개 배율 (이전의 약 4배) */
 const WS = 3.8;
 const ARM = [4.8, 6.6];
@@ -1072,25 +1074,26 @@ export class DragonRig {
     const lean = 0.05 + clamp(this.speed * 0.0045, 0, 0.22);
     const sl = Math.sin(lean);
     const cl = Math.cos(lean);
-    const Lc = IHL * DS; // 머리 ~ 뒷다리: 수직 기둥
-    const Lb = 11; // 기둥 → 나선으로 꺾이는 구간
-    const tailLen = (NR - 1 - IHL) * DS;
-    const R0 = 8.6;
+    const Lc = IC * DS; // 머리 ~ 앞다리: 수직 기둥 (뒷다리부터 꼬리 끝까지는 앞쪽으로 말린다)
+    const Lb = 15; // 기둥 → 나선으로 꺾이는 구간
+    const tailLen = (NR - 1 - IC) * DS;
+    const R0 = 11;
     const R1 = 2.3;
     // 기둥
-    for (let i = 0; i <= IHL; i++) {
+    for (let i = 0; i <= IC; i++) {
       const s = i * DS;
       const sway = Math.sin(this.t * 0.9 - s * 0.045) * 0.7 * (s / Lc);
       Q[i].set(H.x - fx * sl * s + fz * sway, H.y - cl * s, H.z - fz * sl * s - fx * sway);
     }
     // 꼬리: 방향을 한 칸씩 적분 (수직 아래 → 수평 선회로 서서히 눕고, 반지름은 좁아진다)
-    let x = Q[IHL].x;
-    let y = Q[IHL].y;
-    let z = Q[IHL].z;
-    let phi = Math.atan2(-fz, -fx) + this.t * 0.7;
+    let x = Q[IC].x;
+    let y = Q[IC].y;
+    let z = Q[IC].z;
+    // 몸이 바라보는 쪽(앞)으로 꺾여 말린다
+    let phi = Math.atan2(fz, fx) + 0.2 * Math.sin(this.t * 0.6);
     const g0 = Math.PI / 2 - lean;
-    for (let i = IHL + 1; i < NR; i++) {
-      const u = (i - IHL) * DS;
+    for (let i = IC + 1; i < NR; i++) {
+      const u = (i - IC) * DS;
       const kb = smooth(u / Lb);
       const kr = Math.pow(clamp((u - Lb) / Math.max(1, tailLen - Lb), 0, 1), 0.85);
       const r = lerp(R0, R1, kr);
@@ -1118,7 +1121,7 @@ export class DragonRig {
     for (let i = 0; i < NR; i++) {
       const k = smooth(clamp(this.curUp * 1.5 - (i / NR) * 0.5, 0, 1));
       if (k < 0.01) continue;
-      const w = smooth(clamp((i - IHL) / 14, 0, 1)); // 0 = 몸통(등이 뒤) / 1 = 꼬리 나선(등이 위)
+      const w = smooth(clamp((i - IC) / 16, 0, 1)); // 0 = 몸통(등이 뒤) / 1 = 꼬리 나선(등이 위)
       this.tv.set(-fx * (1 - w), w, -fz * (1 - w));
       this.tv.addScaledVector(this.T[i], -this.tv.dot(this.T[i]));
       if (this.tv.lengthSq() < 1e-4) continue;
