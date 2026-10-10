@@ -5,6 +5,7 @@ import { BLOCKED, type Boss, type Circle, type FloatKind, type Host, type Sphere
 import type { Player } from '../../player';
 import { DragonRig, type WingCtl } from './rig';
 import { FireField } from './fire';
+import { BabyDragon, type BabyOwner } from './baby';
 import { buildAttack, SEQUENCE_ATTACKS, type AttackName, type AttackScript } from './attacks';
 
 const V3 = THREE.Vector3;
@@ -48,7 +49,7 @@ interface RayState {
  *  이 클래스는 상태머신(등장/비행/공격/사망), 페이즈, 판정, 비행(선회 · 경로 이동 · 제자리 비행)을 맡는다.
  *  평소에는 플레이어 둘레의 원을 그리며 하늘을 선회한다. 몸통은 머리가 그린 곡선을 그대로 따라오므로 머리의 움직임이 곧 몸의 모양이다.
  */
-export class Dragon implements Boss {
+export class Dragon implements Boss, BabyOwner {
   readonly floor = 3;
   readonly title: string = D.name;
   readonly floorLabel: string = D.floorLabel;
@@ -118,6 +119,10 @@ export class Dragon implements Boss {
   private emberT = 0;
   private lockPos = new V3();
   private posXZ = new V3();
+  /** 1페이즈: 본체는 높은 하늘을 돌고 아기 용 둘이 싸운다 */
+  private babies: BabyDragon[] = [];
+  private babyState: 'none' | 'fight' | 'descend' = 'none';
+  private descendT = 0;
 
   private tmp = new V3();
   private tmp2 = new V3();
@@ -139,7 +144,24 @@ export class Dragon implements Boss {
     return this.phaseIndex === 0 ? D.name : `${D.name} · ${this.phaseIndex === 1 ? '분노' : '광란'}`;
   }
   get pos() {
+    if (this.babyMode) {
+      // 카메라 · 락온 기준은 땅의 아기 용들
+      let n = 0;
+      let x = 0;
+      let z = 0;
+      for (const b of this.babies) {
+        if (!b.alive) continue;
+        x += b.pos.x;
+        z += b.pos.z;
+        n++;
+      }
+      if (n > 0) return this.posXZ.set(x / n, 0, z / n);
+    }
     return this.posXZ.set(this.p.x, 0, this.p.z);
+  }
+  /** 아기 용 전투 중인가 (본체는 높은 하늘을 돌며 공격하지 않는다) */
+  get babyMode() {
+    return this.babyState !== 'none';
   }
   get status() {
     return `${this.state}${this.currentAttack ? ':' + this.currentAttack : ''} y=${this.p.y.toFixed(0)}`;
@@ -250,6 +272,87 @@ export class Dragon implements Boss {
     this.cx = this.p.x * 0.2;
     this.cz = this.p.z * 0.2;
     this.host.sfx.drone(true, 0);
+    this.spawnBabies();
+  }
+
+  /* ───────────────────────── 아기 용 (1페이즈) ───────────────────────── */
+  private spawnBabies() {
+    const floor = this.maxHp * D.phaseAt[0];
+    if (this.phaseIndex !== 0 || this.hp <= floor + 1) return;
+    const n = D.baby.count;
+    const each = (this.hp - floor) / n;
+    const pl = this.player.pos;
+    const base = Math.atan2(pl.z, pl.x) + Math.PI;
+    for (let i = 0; i < n; i++) {
+      const a = base + (i - (n - 1) / 2) * 1.5;
+      this.babies.push(new BabyDragon(this, i, Math.cos(a) * 13, Math.sin(a) * 13, each));
+    }
+    this.babyState = 'fight';
+    this.invulnerable = true;
+    this.host.banner('아기 용', '하늘의 용이 새끼 둘을 내려놓았다 — 아기 용을 쓰러뜨려라', 2.6);
+  }
+
+  /** 디버그 / 강제 공격용: 아기 용 전투를 건너뛴다 */
+  private skipBabies() {
+    for (const b of this.babies) b.dispose();
+    this.babies = [];
+    this.babyState = 'none';
+    this.invulnerable = false;
+    this.move = null;
+    this.hp = Math.min(this.hp, this.maxHp * D.phaseAt[0] + 0.001);
+  }
+
+  babyList(): readonly BabyDragon[] {
+    return this.babies;
+  }
+  babyBlocked() {
+    this.blockSfx();
+  }
+  babyDown(_b: BabyDragon) {
+    void _b;
+  }
+  babyDamage(b: BabyDragon, amount: number, kind: 'weak' | 'exposed' | 'body' | 'special' | 'splash', at: THREE.Vector3): number {
+    const dealt = Math.min(amount, b.hp);
+    if (dealt <= 0) return 0;
+    b.hp -= dealt;
+    this.hp = Math.max(this.maxHp * D.phaseAt[0], this.hp - dealt);
+    b.flash();
+    const strong = kind !== 'body' || amount >= 6;
+    this.host.sfx.hit(amount);
+    if (strong || this.t - this.lastNum > 0.22) {
+      this.lastNum = this.t;
+      const fk: FloatKind = kind === 'weak' || kind === 'exposed' || kind === 'special' ? kind : 'normal';
+      this.host.floatText(this.tmp.set(at.x, at.y + 1.6, at.z), String(Math.round(dealt)) + (kind === 'exposed' ? '!' : ''), fk);
+    }
+    if (strong) {
+      this.host.hitStop(0.03);
+      this.host.shake(0.14);
+    }
+    if (b.hp <= 1e-6) {
+      b.hp = 0;
+      b.die();
+      const left = this.babies.filter((x) => x.alive);
+      if (left.length === 0) {
+        this.hp = this.maxHp * D.phaseAt[0];
+        this.babyState = 'descend';
+        this.descendT = 1.6;
+        this.host.banner('아기 용 처치', '하늘의 용이 분노하며 내려온다!', 2.4);
+      } else {
+        for (const o of left) o.enrage();
+        this.host.banner('아기 용 하나 쓰러짐', '남은 한 마리가 격분한다', 1.8);
+      }
+    }
+    return dealt;
+  }
+
+  private startDescent() {
+    const p = this.p;
+    this.host.sfx.roar(1);
+    this.host.skyPulse?.(1);
+    this.fly([new V3(p.x * 0.5, p.y * 0.55, p.z * 0.5), new V3(p.x * 0.15, 80, p.z * 0.15), new V3(0, 44, 0)], 3.6, 'io', () => {
+      this.babyState = 'none';
+      this.phaseTrigger = true;
+    });
   }
 
   /* ───────────────────────── 업데이트 ───────────────────────── */
@@ -275,6 +378,7 @@ export class Dragon implements Boss {
         break;
     }
 
+    for (const b of this.babies) b.update(dt);
     this.integrate(dt);
     this.updateLook(dt);
     this.updateBreath(dt);
@@ -285,6 +389,7 @@ export class Dragon implements Boss {
     this.updateAmbient(dt);
     if (this.alive) this.lockPos.set(this.rig.headSphere.x, this.rig.headSphere.y, this.rig.headSphere.z);
     this.wingSound(dt);
+    this.windSound();
   }
 
   private syncRig(dt: number) {
@@ -296,7 +401,7 @@ export class Dragon implements Boss {
     // 공중에서 빠르게 가로지르지 않고 떠 있을 때(아레나 밖 선회 · 제자리 비행)는 몸을 수직으로 세운다.
     // 아레나 위에서는 아래가 제단이라 수평 자세를 유지한다 (히스테리시스로 경계에서 떨리지 않게)
     const dist = Math.hypot(this.p.x, this.p.z);
-    const ok = this.alive && this.dying <= 0 && this.state !== 'enter' && !this.move && !r.lying;
+    const ok = this.alive && this.dying <= 0 && this.state !== 'enter' && !this.move && !r.lying && this.babyState !== 'fight';
     this.upOn = ok && dist > (this.upOn ? 32 : 35);
     r.upright = this.upOn;
     void dt;
@@ -424,12 +529,14 @@ export class Dragon implements Boss {
     const ph = this.phaseIndex;
     const C = D.cruise;
     const pl = this.player.pos;
-    const R = this.cruiseOverride?.radius ?? C.radius[ph];
-    const alt = this.cruiseOverride?.alt ?? C.alt[ph];
-    const turn = C.turn[ph];
-    const sp = C.speed[ph];
-    this.cx += (pl.x * C.follow - this.cx) * (1 - Math.exp(-0.9 * dt));
-    this.cz += (pl.z * C.follow - this.cz) * (1 - Math.exp(-0.9 * dt));
+    const bm = this.babyState === 'fight';
+    const R = bm ? D.baby.sky.radius : this.cruiseOverride?.radius ?? C.radius[ph];
+    const alt = bm ? D.baby.sky.alt : this.cruiseOverride?.alt ?? C.alt[ph];
+    const turn = bm ? 0.45 : C.turn[ph];
+    const sp = bm ? D.baby.sky.speed : C.speed[ph];
+    const follow = bm ? 0.08 : C.follow;
+    this.cx += (pl.x * follow - this.cx) * (1 - Math.exp(-0.9 * dt));
+    this.cz += (pl.z * follow - this.cz) * (1 - Math.exp(-0.9 * dt));
     this.orbitT -= dt;
     if (this.orbitT < 0) {
       this.orbitDir = -this.orbitDir;
@@ -444,7 +551,7 @@ export class Dragon implements Boss {
     // 몸이 한 바퀴보다 길어서, 고도를 천천히 오르내려 몸통이 자기 몸과 겹치지 않게 한다
     // 상하 이동을 적극적으로: 크게 솟구쳤다 내려꽂히기를 반복한다 (몸이 한 바퀴보다 길어서 몸통이 자기 몸과 겹치지 않는 효과도 있다)
     // 몸을 세우고 있을 때는 몸통이 길게 늘어져 있어 (꼬리 끝이 구름 바다에 잠기지 않게) 오르내림 폭을 줄인다
-    const osc = this.upOn ? 0.4 : 1;
+    const osc = bm ? 0.25 : this.upOn ? 0.4 : 1;
     const gy = alt + osc * (12 * Math.sin(this.t * 0.46) + 3.5 * Math.sin(this.t * 0.97 + 1));
     const wantYaw = Math.atan2(gx - p.x, gz - p.z);
     const rate = clamp(wrapPi(wantYaw - this.yaw) * 2.4, -turn, turn);
@@ -626,9 +733,21 @@ export class Dragon implements Boss {
     if (this.beatT >= 1) {
       this.beatT -= 1;
       const d = Math.hypot(this.player.pos.x - this.p.x, this.player.pos.z - this.p.z);
-      const v = clamp(1.15 - d / 55, 0.2, 1);
+      const v = clamp(1.25 - d / 70, 0.4, 1);
       if (this.rig.wing.amp > 0.15) this.host.sfx.wingbeat(v);
     }
+  }
+
+  /** 이동 중 귀를 스치는 바람 소리 (빠를수록, 가까울수록 크게) */
+  private windSound() {
+    if (!this.alive || this.state === 'dead') {
+      this.host.sfx.wind(0);
+      return;
+    }
+    const d = Math.hypot(this.player.pos.x - this.p.x, this.player.pos.z - this.p.z, this.p.y * 0.5);
+    const fast = clamp((this.speed - 8) / 38, 0, 1);
+    const near = clamp(1.25 - d / 120, 0.3, 1);
+    this.host.sfx.wind(fast * near);
   }
 
   /* ───────────────────────── 선회 → 공격 ───────────────────────── */
@@ -638,6 +757,15 @@ export class Dragon implements Boss {
     const cycle = 0.5 + 0.5 * Math.sin(this.t * 0.5);
     this.setWings({ hz, amp: 0.3 + 0.38 * cycle + clamp(this.pitch, 0, 0.5) * 0.4, fold: 0, raise: 0.1, spread: 1 });
     rig.undulate = 0.55 + 0.15 * this.phaseIndex;
+    if (this.babyMode) {
+      // 높은 하늘을 천천히 돈다 (공격하지 않는다). 아기 용을 모두 쓰러뜨리면 분노하며 내려온다
+      if (this.babyState === 'fight') this.setWings({ hz: 0.3, amp: 0.34, fold: 0, raise: 0.12, spread: 1 });
+      if (this.babyState === 'descend' && this.descendT > 0) {
+        this.descendT -= dt;
+        if (this.descendT <= 0) this.startDescent();
+      }
+      return;
+    }
     if (this.phaseTrigger) {
       this.phaseTrigger = false;
       this.startAttack('roar');
@@ -728,6 +856,7 @@ export class Dragon implements Boss {
   /** 디버그: 선회 중이면 다음 공격을 즉시 지정, 공격 중이면 끊고 시작 */
   forceAttack(name: string) {
     if (!this.alive || this.state === 'enter') return;
+    if (this.babyMode) this.skipBabies();
     if (this.state === 'attack') this.abortAttack();
     this.forced = name as AttackName;
     this.idleT = 0;
@@ -771,10 +900,30 @@ export class Dragon implements Boss {
   }
 
   aimSpheres(): readonly Sphere[] {
-    return this.alive ? this.rig.parts : [];
+    if (!this.alive) return [];
+    if (this.babyMode) {
+      const out: Sphere[] = [];
+      for (const b of this.babies) out.push(...b.aimSphereList());
+      return out;
+    }
+    return this.rig.parts;
   }
 
   lockPoint(out: THREE.Vector3) {
+    if (this.babyMode) {
+      // 플레이어와 가장 가까운 아기 용의 머리
+      let best: BabyDragon | null = null;
+      let bd = 1e9;
+      for (const b of this.babies) {
+        if (!b.alive) continue;
+        const d = Math.hypot(b.pos.x - this.player.pos.x, b.pos.z - this.player.pos.z);
+        if (d < bd) {
+          bd = d;
+          best = b;
+        }
+      }
+      if (best) return out.copy(best.pos);
+    }
     return out.copy(this.lockPos);
   }
 
@@ -885,6 +1034,7 @@ export class Dragon implements Boss {
     host.sfx.bossDeath();
     host.sfx.roar();
     host.sfx.drone(false);
+    host.sfx.wind(0);
     host.flash('#ffd9a0', 0.55, 0.9);
     host.skyPulse?.(1);
     const c = this.tmp.set(this.lockPos.x, this.lockPos.y, this.lockPos.z);
@@ -968,9 +1118,12 @@ export class Dragon implements Boss {
   }
 
   dispose() {
+    for (const b of this.babies) b.dispose();
+    this.babies = [];
     this.field.dispose();
     this.rig.dispose();
     this.host.sfx.drone(false);
+    this.host.sfx.wind(0);
     this.host.targets = this.host.targets.filter((t) => t !== this);
   }
 }

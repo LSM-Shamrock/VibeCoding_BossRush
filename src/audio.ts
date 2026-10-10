@@ -279,18 +279,67 @@ export class Sfx {
     this.tone(95, 28, 0.6, 'sine', 0.5);
     this.tone(260, 70, 0.2, 'square', 0.08);
   }
-  /** 페이즈 전환 포효 */
-  roar() {
-    // 깊은 울부짖음: 내려앉는 톱니파 여러 겹 + 떨리는 중음 + 거친 숨소리 + 바닥을 울리는 저음
-    this.tone(210, 70, 2.2, 'sawtooth', 0.2);
-    this.tone(160, 52, 2.4, 'sawtooth', 0.24, 0.05);
-    this.tone(118, 44, 2.6, 'sawtooth', 0.22, 0.1);
-    this.tone(320, 120, 1.4, 'square', 0.07, 0.15);
-    this.tone(48, 30, 2.8, 'sine', 0.55);
-    this.noise(2.0, 0.26, 1800, 160, 'bandpass');
-    this.noise(1.2, 0.2, 5200, 900, 'highpass', 0.3);
-    this.noise(0.5, 0.45, 900, 40, 'lowpass', 0.55);
-    this.tone(70, 28, 0.9, 'sine', 0.6, 0.6);
+  /** 용의 포효: 목이 울리는 낮은 으르렁(떨리는 톱니파 + 포먼트) → 터져 나오는 고함 → 길게 갈라지며 잦아드는 소리 */
+  roar(vol = 1) {
+    this.growl(1.0 * vol, 2.6, 190, 0.2);
+    // 저음으로 바닥을 울리는 몸통
+    this.tone(52, 30, 2.8, 'sine', 0.5 * vol);
+    this.tone(70, 28, 1.0, 'sine', 0.55 * vol, 0.5);
+    // 거친 숨 / 쇳소리 끝자락
+    this.noise(2.2, 0.22 * vol, 1700, 150, 'bandpass');
+    this.noise(1.4, 0.2 * vol, 5600, 900, 'highpass', 0.25);
+    this.noise(0.5, 0.42 * vol, 900, 40, 'lowpass', 0.5);
+  }
+  /** 아기 용의 울음: 높고 짧게 찢어지는 소리 */
+  babyRoar(vol = 1) {
+    this.growl(0.7 * vol, 0.9, 520, 0.12);
+    this.tone(900, 420, 0.5, 'sawtooth', 0.05 * vol);
+    this.noise(0.5, 0.12 * vol, 4200, 900, 'bandpass');
+  }
+  /**
+   * 으르렁 한 번: 피치가 솟았다 내려앉고(pitch 시작 주파수), 느리게 떨리며(비브라토), 입 모양처럼 필터가 열렸다 닫힌다.
+   * len 초, base = 시작 기본음, rise = 처음 솟는 정도 (0~)
+   */
+  private growl(vol: number, len: number, base: number, rise: number) {
+    if (!this.ctx || !this.master) return;
+    const c = this.ctx;
+    const t = c.currentTime;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.2 * vol, t + 0.18);
+    g.gain.setValueAtTime(0.2 * vol, t + len * 0.45);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    // 입 모양: 두 개의 포먼트(밴드패스) 를 거친다
+    const f1 = c.createBiquadFilter();
+    f1.type = 'bandpass';
+    f1.Q.value = 2.2;
+    f1.frequency.setValueAtTime(base * 2.2, t);
+    f1.frequency.exponentialRampToValueAtTime(base * 5.5, t + len * 0.3);
+    f1.frequency.exponentialRampToValueAtTime(base * 1.6, t + len);
+    const f2 = c.createBiquadFilter();
+    f2.type = 'lowpass';
+    f2.frequency.setValueAtTime(base * 9, t);
+    f2.frequency.exponentialRampToValueAtTime(base * 2.5, t + len);
+    f1.connect(f2).connect(g).connect(this.master);
+    const lfo = c.createOscillator();
+    lfo.frequency.value = 18 + base * 0.02;
+    const lg = c.createGain();
+    lg.gain.value = base * 0.07;
+    lfo.connect(lg);
+    for (const [det, type] of [[0, 'sawtooth'], [9, 'sawtooth'], [-7, 'square']] as const) {
+      const o = c.createOscillator();
+      o.type = type;
+      o.detune.value = det;
+      o.frequency.setValueAtTime(base * 0.7, t);
+      o.frequency.exponentialRampToValueAtTime(base * (1 + rise * 3), t + 0.22);
+      o.frequency.exponentialRampToValueAtTime(Math.max(24, base * 0.32), t + len);
+      lg.connect(o.frequency);
+      o.connect(f1);
+      o.start(t);
+      o.stop(t + len + 0.05);
+    }
+    lfo.start(t);
+    lfo.stop(t + len + 0.05);
   }
   /** 알 / 새끼가 터지는 소리 */
   pop() {
@@ -304,10 +353,49 @@ export class Sfx {
     this.noise(len * 0.9, 0.12 * vol, 2600, 450, 'lowpass', 0.05);
     this.tone(96, 58, len, 'sawtooth', 0.06 * vol);
   }
-  /** 거대한 날갯짓 */
+  /** 거대한 날갯짓: 공기를 가르는 휙 소리 + 가죽막이 펄럭이는 둔탁한 소리 */
   wingbeat(vol = 1) {
-    this.noise(0.3, 0.15 * vol, 520, 70, 'lowpass');
-    this.tone(64, 38, 0.28, 'sine', 0.22 * vol);
+    this.noise(0.42, 0.34 * vol, 380, 1500, 'bandpass'); // 휘익
+    this.noise(0.38, 0.22 * vol, 1500, 220, 'bandpass', 0.18); // 내리칠 때 휘잉
+    this.noise(0.26, 0.28 * vol, 520, 70, 'lowpass', 0.14); // 펄럭
+    this.tone(66, 36, 0.32, 'sine', 0.34 * vol, 0.14); // 쿵
+  }
+
+  /* ───────────── 비행 바람 소리 (이동 중 계속) ───────────── */
+  private windNodes: { src: AudioBufferSourceNode; f: BiquadFilterNode; g: GainNode } | null = null;
+  /**
+   * 용이 빠르게 움직일 때 귀를 스치는 바람 소리. 매 프레임 세기(0~1)를 넘겨 준다. 거의 0이면 서서히 꺼진다.
+   * 속도가 오를수록 소리가 커지고 높아진다.
+   */
+  wind(k: number) {
+    if (!this.ctx || !this.master || !this.noiseBuf) return;
+    const c = this.ctx;
+    if (!this.windNodes) {
+      if (k < 0.02) return;
+      const src = c.createBufferSource();
+      src.buffer = this.noiseBuf;
+      src.loop = true;
+      const f = c.createBiquadFilter();
+      f.type = 'bandpass';
+      f.Q.value = 0.9;
+      f.frequency.value = 400;
+      const g = c.createGain();
+      g.gain.value = 0.0001;
+      // 일렁이는 돌풍
+      const lfo = c.createOscillator();
+      lfo.frequency.value = 0.7;
+      const lg = c.createGain();
+      lg.gain.value = 160;
+      lfo.connect(lg).connect(f.frequency);
+      lfo.start();
+      src.connect(f).connect(g).connect(this.master);
+      src.start();
+      this.windNodes = { src, f, g };
+    }
+    const w = this.windNodes;
+    const kk = Math.max(0, Math.min(1, k));
+    w.g.gain.setTargetAtTime(kk * 0.2, c.currentTime, 0.12);
+    w.f.frequency.setTargetAtTime(320 + 900 * kk, c.currentTime, 0.12);
   }
   /** 태양 광선: 차오르는 울림(charge) / 발사 */
   sunCharge(len = 2) {

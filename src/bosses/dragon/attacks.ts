@@ -954,89 +954,180 @@ function orbit(s: Dragon): AttackScript {
   return { steps, end: dur + 1.0 };
 }
 
-/* ───────────────────────── 착지 (공격 기회) ─────────────────────────
- * 하늘의 용에게는 불꽃이 닿지 않는다. 용이 숨을 고르러 플레이어 반대편 땅에 내려앉아 엎드린다 —
- * 머리와 가슴 보석이 드러나 피해가 크게 늘어나는 공격 기회. 몸에 닿은 채 오래 있으면 피해를 입는다.
+/* ───────────────────────── 착지 · 기 모으기 (공격 기회) ─────────────────────────
+ * 용이 플레이어 반대편 땅에 내려앉아 몸을 일으키고, 날개를 펴 사방의 열기를 입가로 끌어모은다.
+ * 기가 차오르는 동안은 머리(와 가슴 보석)가 크게 드러난다 — 이때가 때릴 기회. 충분히 때리면 기가 흩어지며 저지된다.
+ * 끝까지 모으면 플레이어 쪽으로 불덩이 부채꼴을 쏟아낸다.
  */
 function land(s: Dragon): AttackScript {
   const ph = s.phaseIndex;
   const C = D.land;
-  const stay = C.stay[ph];
+  const charge = C.charge[ph];
   const T = new V3();
   const dir = new V3();
   const arriveAt = C.descend;
-  const steps: Step[] = [
-    {
-      at: 0,
-      fn: () => {
-        const pl = s.player.pos;
-        const a = Math.atan2(pl.z, pl.x) + Math.PI + (Math.random() - 0.5) * 0.9;
-        T.set(Math.cos(a) * C.far, 0, Math.sin(a) * C.far);
-        dir.set(pl.x - T.x, 0, pl.z - T.z).normalize();
-        s.look('player');
-        s.rig.jaw = 0.4;
-        s.setWings({ hz: 1.2, amp: 0.9, raise: 0.3 });
-        s.rig.armPose = 'flex'; s.rig.legPose = 'trail';
-        s.fly([new V3(T.x - dir.x * 10, 26, T.z - dir.z * 10), new V3(T.x, 1.4, T.z)], arriveAt, 'io');
-        s.host.sfx.roar();
-        s.host.banner('착지', '지쳐 엎드린다 — 머리와 가슴 보석을 노려라!', 2.0);
-        s.host.skyPulse?.(0.5);
-      },
-    },
-    {
-      at: arriveAt,
-      fn: () => {
-        const { host, rig } = s;
-        host.shake(1.4, 0.3);
-        host.sfx.land();
-        host.fx.ring(T.x, T.z, 12, 0.7, 0xffd27a);
-        host.fx.particles.burst(new V3(T.x, 0.8, T.z), 0x7a5a42, 50, 11, 1.1, 0.5, 0.6, 7, 1.2);
-        host.fx.burstLight(new V3(T.x, 3, T.z), 0xffa050, 200, 0.6);
-        const pl = s.player;
-        const d = Math.hypot(pl.pos.x - T.x, pl.pos.z - T.z);
-        if (d < 10) pl.push(T.x, T.z, 8 * (1 - d / 10) + 2);
-        rig.lieDown();
-        rig.stunned = true;
-        rig.armPose = 'brace'; rig.legPose = 'brace';
-        s.exposedOn(true);
-        s.hoverAt(new V3(T.x, 1.4, T.z), 8, Math.atan2(dir.x, dir.z), -0.28);
-      },
-    },
-  ];
-  for (let k = 0; k < Math.floor(stay / 0.45); k++) {
-    steps.push({
-      at: arriveAt + 0.6 + k * 0.45,
-      fn: () => {
-        const M = s.mouthPos(new V3());
-        s.host.fx.particles.burst(M, 0x555050, 5, 2.5, 1.2, 0.5, 0.9, -1, 1);
-        s.host.fx.particles.burst(M, 0xff6a20, 2, 2, 0.6, 0.2, 0.5, 0, 2);
-      },
-    });
-  }
-  const riseAt = arriveAt + stay;
+  const gatherAt = arriveAt + 0.5;
+  const fireAt = gatherAt + charge;
+  const headY = 4.2;
+  let broken = false;
+  let done = false;
+  let hp0 = 0;
+  const script: AttackScript = { steps: [], end: fireAt + 3 };
+  const steps = script.steps;
+
+  const lift = (delay = 0) => {
+    const { host, rig } = s;
+    done = true;
+    s.exposedOn(false);
+    rig.stunned = false;
+    rig.fire = 0;
+    rig.jaw = 0.8;
+    s.setWings({ hz: 1.5, amp: 1.0, fold: 0, raise: 0.25 });
+    rig.armPose = 'roar'; rig.legPose = 'roar';
+    host.sfx.wingbeat(1.5);
+    host.shake(1.0, 0.3);
+    host.fx.ring(s.p.x, s.p.z, 14, 0.6, 0xffa060);
+    host.fx.particles.burst(new V3(s.p.x, 0.5, s.p.z), 0x7a5a42, 50, 11, 1.0, 0.5, 0.6, 6, 1.2);
+    const pl = s.player;
+    const d = Math.hypot(pl.pos.x - s.p.x, pl.pos.z - s.p.z);
+    if (d < 14) pl.push(s.p.x, s.p.z, 8 * (1 - d / 14) + 2); // 날갯짓 바람에 밀려난다 (피해 없음)
+    s.fly([new V3(s.p.x - dir.x * 3, 12, s.p.z - dir.z * 3), new V3(s.p.x - dir.x * 14, 40, s.p.z - dir.z * 14)], 1.9, 'in');
+    script.end = 0;
+    void delay;
+  };
+
   steps.push({
-    at: riseAt,
+    at: 0,
     fn: () => {
-      const { host, rig } = s;
-      s.exposedOn(false);
-      rig.stunned = false;
-      rig.liftOff();
-      rig.jaw = 0.8;
-      s.setWings({ hz: 1.5, amp: 1.0, fold: 0, raise: 0.25 });
-      rig.armPose = 'roar'; rig.legPose = 'roar';
-      host.sfx.roar();
-      host.sfx.wingbeat(1.5);
-      host.shake(1.0, 0.3);
-      host.fx.ring(s.p.x, s.p.z, 14, 0.6, 0xffa060);
-      host.fx.particles.burst(new V3(s.p.x, 0.5, s.p.z), 0x7a5a42, 50, 11, 1.0, 0.5, 0.6, 6, 1.2);
-      const pl = s.player;
-      const d = Math.hypot(pl.pos.x - s.p.x, pl.pos.z - s.p.z);
-      if (d < 14) pl.push(s.p.x, s.p.z, 8 * (1 - d / 14) + 2); // 날갯짓 바람에 밀려난다 (피해 없음)
-      s.fly([new V3(s.p.x - dir.x * 3, 12, s.p.z - dir.z * 3), new V3(s.p.x - dir.x * 14, 40, s.p.z - dir.z * 14)], 1.9, 'in');
+      const pl = s.player.pos;
+      const a = Math.atan2(pl.z, pl.x) + Math.PI + (Math.random() - 0.5) * 0.9;
+      T.set(Math.cos(a) * C.far, 0, Math.sin(a) * C.far);
+      dir.set(pl.x - T.x, 0, pl.z - T.z).normalize();
+      s.look('player');
+      s.rig.jaw = 0.4;
+      s.setWings({ hz: 1.2, amp: 0.9, raise: 0.3 });
+      s.rig.armPose = 'flex'; s.rig.legPose = 'trail';
+      s.fly([new V3(T.x - dir.x * 10, 26, T.z - dir.z * 10), new V3(T.x, 3.2, T.z)], arriveAt, 'io');
+      s.host.sfx.roar();
+      s.host.skyPulse?.(0.5);
     },
   });
-  steps.push({ at: riseAt + 1.6, fn: () => { s.rig.jaw = 0.1; s.rig.armPose = 'tuck'; s.rig.legPose = 'trail'; } });
-  return { steps, end: riseAt + 1.9 };
+  steps.push({
+    at: arriveAt,
+    fn: () => {
+      const { host, rig } = s;
+      host.shake(1.4, 0.3);
+      host.sfx.land();
+      host.fx.ring(T.x, T.z, 12, 0.7, 0xffd27a);
+      host.fx.particles.burst(new V3(T.x, 0.8, T.z), 0x7a5a42, 50, 11, 1.1, 0.5, 0.6, 7, 1.2);
+      host.fx.burstLight(new V3(T.x, 3, T.z), 0xffa050, 200, 0.6);
+      const pl = s.player;
+      const d = Math.hypot(pl.pos.x - T.x, pl.pos.z - T.z);
+      if (d < 10) pl.push(T.x, T.z, 8 * (1 - d / 10) + 2);
+      s.hoverAt(new V3(T.x, headY * 0.7, T.z), 7, Math.atan2(dir.x, dir.z), 0.3);
+    },
+  });
+  steps.push({
+    at: gatherAt,
+    fn: () => {
+      const { host, rig } = s;
+      hp0 = s.hp;
+      s.host.banner('기 모으기', '기를 모으는 머리를 노려라!', 1.8);
+      s.exposedOn(true);
+      rig.armPose = 'gather'; rig.legPose = 'roar';
+      rig.jaw = 0.9;
+      rig.fire = 1;
+      s.setWings({ hz: 0.45, amp: 0.3, fold: 0, raise: 0.95, spread: 1 });
+      s.hoverAt(new V3(T.x, headY, T.z), 3, Math.atan2(dir.x, dir.z), 0.5);
+      host.sfx.sunCharge(charge);
+      host.skyPulse?.(0.8);
+      const tmp = new V3();
+      const fwd = new V3();
+      let tt = 0;
+      let ringT = 0;
+      s.onTick((dt) => {
+        if (done) return;
+        tt += dt;
+        const k = clamp(tt / charge, 0, 1);
+        s.mouthPos(tmp);
+        s.rig.headForward(fwd);
+        tmp.addScaledVector(fwd, 1.6 + 1.2 * k);
+        s.field.charge(tmp, k);
+        host.shake(0.05 + 0.22 * k, 0.05);
+        // 사방의 열기가 입가로 빨려 들어온다
+        ringT -= dt;
+        if (ringT <= 0) {
+          ringT = 0.42 - 0.22 * k;
+          host.fx.ring(tmp.x, tmp.z, 9, 0.5, 0xffb060, 0.05);
+        }
+        for (let i = 0; i < 2; i++) {
+          const a = Math.random() * TAU;
+          const r = 7 + Math.random() * 6;
+          const q = new V3(tmp.x + Math.cos(a) * r, 0.4 + Math.random() * 5, tmp.z + Math.sin(a) * r);
+          host.fx.particles.burst(q, Math.random() < 0.5 ? 0xff7a2a : 0xffc060, 1, 1.0, 0.5, 0.2, 0.4, 0, 1.6);
+        }
+        // 충분히 맞으면 기가 흩어진다
+        if (!broken && s.hp <= hp0 - C.breakDmg) {
+          broken = true;
+          host.banner('저지!', '모으던 기가 흩어졌다', 1.4);
+          host.sfx.roar();
+          host.hitStop(0.12);
+          host.shake(1.6, 0.3);
+          host.flash('#ffd9a0', 0.4, 0.4);
+          host.fx.burstLight(tmp, 0xffc070, 260, 0.8);
+          host.fx.particles.burst(tmp, 0xff7a2a, 60, 12, 0.9, 0.3, 0.6);
+          s.rig.fire = 0;
+          s.rig.jaw = 0.3;
+          s.after(0.9, () => lift());
+          done = true;
+        }
+      });
+    },
+  });
+  // 기가 차면: 플레이어 쪽으로 불덩이 부채꼴
+  steps.push({
+    at: fireAt,
+    fn: () => {
+      if (broken) return;
+      const { host, rig } = s;
+      const M = s.mouthPos(new V3());
+      const tgt = ahead(s, 0.3);
+      const n = C.shots[ph];
+      host.sfx.roar();
+      host.shake(1.8, 0.3);
+      host.flash('#ffb060', 0.45, 0.4);
+      host.fx.burstLight(M, 0xffc070, 300, 0.7);
+      const px = -(tgt.z - M.z);
+      const pz = tgt.x - M.x;
+      const pl = Math.hypot(px, pz) || 1;
+      for (let i = 0; i < n; i++) {
+        const off = (i - (n - 1) / 2) * 5.0;
+        const f = inArena(new V3(tgt.x + (px / pl) * off, 0, tgt.z + (pz / pl) * off), 1.0);
+        s.field.lob(M, f, 0.9 + Math.abs(i - (n - 1) / 2) * 0.08, 8, 2.8, 4 + ph);
+      }
+      s.field.jet(M, tgt, 1);
+      rig.jaw = 1;
+      rig.armPose = 'rake';
+      done = true;
+    },
+  });
+  steps.push({
+    at: fireAt + 1.5,
+    fn: () => {
+      if (broken) return;
+      s.exposedOn(true); // 쏟아낸 뒤 숨을 고르는 짧은 빈틈
+      s.rig.fire = 0;
+      s.rig.jaw = 0.4;
+    },
+  });
+  steps.push({
+    at: fireAt + 2.4,
+    fn: () => {
+      if (broken) return;
+      lift();
+    },
+  });
+  return script;
 }
 
 /* ───────────────────────── 회전 광선 ─────────────────────────
