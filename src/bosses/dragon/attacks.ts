@@ -11,7 +11,7 @@ const D = CFG.dragon;
 const TAU = Math.PI * 2;
 
 export type AttackName = 'spit' | 'strafe' | 'swoop' | 'meteor' | 'crash' | 'sunray' | 'gale' | 'wind' | 'orbit' | 'land' | 'scythe' | 'roar';
-export const SEQUENCE_ATTACKS: AttackName[] = ['spit', 'strafe', 'swoop', 'meteor', 'crash', 'sunray', 'gale', 'wind', 'orbit', 'land', 'scythe'];
+export const SEQUENCE_ATTACKS: AttackName[] = ['spit', 'strafe', 'swoop', 'meteor', 'sunray', 'gale', 'wind', 'orbit', 'land', 'scythe'];
 
 export function buildAttack(name: AttackName, s: Dragon): AttackScript {
   const sc = build(name, s);

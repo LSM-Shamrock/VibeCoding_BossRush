@@ -211,8 +211,8 @@ export const CFG = {
   dragon: {
     name: '겁화의 용',
     floorLabel: '3층 · 불타는 하늘 신전',
-    maxHp: 1250, // 이무기(1200)보다 살짝만 높게
-    phaseAt: [0.75, 0.42], // 1페이즈 체력 25% (이전 33% 의 0.75배) · 3페이즈 체력 42%
+    maxHp: 1405, // 1페이즈(아기 용 둘) 469 + 2페이즈 412 + 3페이즈 525
+    phaseAt: [0.667, 0.374], // 1페이즈 체력 33%(아기 용 둘, 이전의 1.5배) · 2페이즈 29% · 3페이즈 38%
     headMult: 1.5, // 머리 · 가슴 보석(약점) 피해 배율
     contact: { hurtAfter: 0.85 }, // 몸에 닿은 채 이 시간(초)이 지나면 체력 1 (이무기 1.7초의 절반). 돌진 · 추락 중에는 닿는 순간 바로 피해
     bodyMult: 0.7, // 몸통
@@ -225,8 +225,8 @@ export const CFG = {
 
     sequence: [
       ['spit', 'strafe', 'wind', 'land', 'swoop', 'orbit', 'spit', 'strafe', 'land', 'swoop'],
-      ['meteor', 'strafe', 'wind', 'crash', 'orbit', 'spit', 'land', 'swoop', 'meteor', 'scythe', 'strafe', 'crash', 'land'],
-      ['sunray', 'orbit', 'gale', 'wind', 'strafe', 'scythe', 'crash', 'meteor', 'sunray', 'swoop', 'land', 'gale', 'scythe', 'wind', 'crash', 'land'],
+      ['meteor', 'strafe', 'wind', 'orbit', 'spit', 'land', 'swoop', 'meteor', 'scythe', 'strafe', 'land'],
+      ['sunray', 'orbit', 'gale', 'wind', 'strafe', 'scythe', 'meteor', 'sunray', 'swoop', 'land', 'gale', 'scythe', 'wind', 'land'],
     ],
 
     // 화염탄: 입에 불을 모았다가 불덩이를 연달아 던진다. 착지 고리가 차오른다. (페이즈 2~: 바닥에 불이 남는다)
@@ -259,15 +259,17 @@ export const CFG = {
       scale: 0.24, // 본체 모델 대비 크기 (몸통 길이 200 → 48, 꼬리를 줄이면 그보다 짧다)
       tail: 0.75, // 꼬리 길이 배율
       hitK: 2.0, // 몸 판정 구 배율 (모델보다 넉넉하게)
-      run: 7.4, // 걷는 속도
+      run: 8.6, // 걷는 속도
       far: 13, // 이보다 멀면 다가온다
       near: 6.5, // 이보다 가까우면 물러난다
-      gap: [1.5, 2.6], // 공격과 공격 사이
+      gap: [1.1, 2.0], // 공격과 공격 사이
       rage: 1.3, // 한 마리가 쓰러지면 남은 한 마리의 속도 배율
       daze: 1.5, // 돌진 · 내리꽂기 뒤 어지러운 시간 (머리 피해 ×3)
-      bite: { tell: 0.95, speed: 31, min: 14, max: 24 },
-      spit: { windup: 0.85, count: 3, gap: 0.36, flight: 1.0, peak: 6, radius: 2.1, spread: 3.2, recover: 0.7 },
-      swoop: { alt: 30, back: 30, climb: 1.7, tell: 1.0, dive: 0.7, radius: 3.0 }, // alt = 도약 높이, back = 표적에서 떨어진 거리 (비스듬히 내려꽂는다)
+      bite: { tell: 0.85, speed: 33, min: 14, max: 24, count: 2, trail: 2.6 }, // 연달아 count 번 달린다. 지나간 자리에 불길이 남는다
+      spit: { windup: 0.75, count: 5, gap: 0.3, flight: 1.0, peak: 6, radius: 2.1, spread: 3.6, recover: 0.6, zone: 2.6, ring: 6 }, // 마지막에 표적 둘레로 ring 발의 불덩이
+      swoop: { alt: 30, back: 30, climb: 1.5, tell: 0.9, dive: 0.7, radius: 3.0, wave: 13 }, // alt = 도약 높이, back = 표적에서 떨어진 거리 (비스듬히 내려꽂는다)
+      // 외곽 선회 사격: 맵 가장자리를 달리며 불덩이를 흩뿌린다
+      orbit: { laps: 1.1, speed: 15, interval: 0.4, flight: 1.0, zone: 2.4, radius: 2.1 },
       sky: { alt: 255, radius: 62, speed: 13 }, // 본체가 도는 높이 · 반경 · 속도
     },
   },
