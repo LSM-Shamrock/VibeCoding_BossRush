@@ -77,6 +77,7 @@ export class BabyDragon implements Target {
   private runLeft = 0;
   private shots = 0;
   private lookYaw = 0;
+  private land = new V3();
   private biteLeft = 0;
   private tellScale = 1;
   private trailAcc = 0;
@@ -105,9 +106,16 @@ export class BabyDragon implements Target {
   ) {
     this.hp = hp;
     this.maxHp = hp;
-    this.pos.set(x, 70, z);
+    // 하늘 높이에서 60° 로 비스듬히 내려온다: 착지점에서 바깥쪽으로 H / tan60° 떨어진 곳이 출발점
+    this.land.set(x, 0, z);
+    const ol = Math.hypot(x, z) || 1;
+    const H = B.drop.height;
+    const away = H / Math.tan((B.drop.angle * Math.PI) / 180);
+    this.from.set(x + (x / ol) * away, H, z + (z / ol) * away);
+    this.pos.copy(this.from);
     this.vy = 0;
-    this.yaw = Math.atan2(-x, -z);
+    this.yaw = Math.atan2(this.land.x - this.from.x, this.land.z - this.from.z);
+    this.pitch = -(B.drop.angle * Math.PI) / 180;
     this.seq = index === 0 ? ['spit', 'bite', 'orbit', 'swoop', 'bite', 'spit', 'orbit', 'swoop'] : ['bite', 'orbit', 'swoop', 'spit', 'bite', 'orbit', 'spit', 'swoop'];
     this.seqI = 0;
     this.attackT = 1.2 + index * 1.7;
@@ -115,17 +123,20 @@ export class BabyDragon implements Target {
     this.rig.group.scale.setScalar(S);
     this.rig.tailK = B.tail;
     this.rig.wing.hz = 1;
-    this.rig.layoutLine(x / S, 70 / S, z / S, this.yaw, 0);
+    this.rig.layoutLine(this.from.x / S, this.from.y / S, this.from.z / S, this.yaw, this.pitch);
     this.rig.setRage(0);
     for (let i = 0; i < this.rig.parts.length; i++) this.spheres.push({ x: 0, y: 0, z: 0, r: 1 });
     // 떨어질 자리 표시
-    owner.host.fx.telegraphs.circle(x, z, 3.2, Math.sqrt((70 - this.hy) / 35), () => {});
+    owner.host.fx.telegraphs.circle(x, z, 3.2, B.drop.time, () => {});
     owner.host.targets.push(this);
     this.sync(0);
   }
 
   get invulnerable() {
     return this.state === 'drop' || this.state === 'dying';
+  }
+  get attacking() {
+    return this.state === 'bite' || this.state === 'spit' || this.state === 'swoop' || this.state === 'orbit';
   }
   get dazed() {
     return this.state === 'daze';
@@ -228,12 +239,17 @@ export class BabyDragon implements Target {
 
   private updateDrop(dt: number) {
     const { host } = this.owner;
-    this.vy += 70 * dt;
-    this.pos.y -= this.vy * dt;
+    const k = Math.min(1, this.t / B.drop.time);
+    this.pos.x = this.from.x + (this.land.x - this.from.x) * k;
+    this.pos.z = this.from.z + (this.land.z - this.from.z) * k;
+    this.pos.y = this.from.y + (this.hy - this.from.y) * k;
+    this.speed = 50;
     this.flap.fold = 1;
     this.jaw = 0.8;
-    if (this.pos.y <= this.hy) {
-      this.pos.y = this.hy;
+    void dt;
+    if (k >= 1) {
+      this.pos.set(this.land.x, this.hy, this.land.z);
+      this.pitch = 0;
       this.vy = 0;
       this.state = 'prowl';
       this.sub = 0;
@@ -286,7 +302,11 @@ export class BabyDragon implements Target {
     this.gait += dt * (sp * 0.55);
     void pl;
     this.attackT -= dt;
-    if (this.attackT <= 0) this.startAttack(this.next());
+    if (this.attackT <= 0) {
+      // 두 마리가 동시에 공격하지 않는다
+      if (this.owner.babyList().some((o) => o !== this && o.alive && o.attacking)) this.attackT = 0.4;
+      else this.startAttack(this.next());
+    }
   }
 
   private startAttack(a: Atk) {
@@ -298,7 +318,7 @@ export class BabyDragon implements Target {
     this.ringDone = false;
     if (a === 'bite') {
       this.dir.set(0, 0, 0);
-      this.biteLeft = B.bite.count + (this.rage > 1 ? 1 : 0);
+      this.biteLeft = B.bite.count;
       this.tellScale = 1;
       host.sfx.telegraph();
     } else if (a === 'orbit') {
@@ -365,7 +385,7 @@ export class BabyDragon implements Target {
     this.trailAcc += step;
     if (this.trailAcc >= B.bite.trail) {
       this.trailAcc = 0;
-      this.owner.field.burn(this.pos.x, this.pos.z, 1.7, 2.2);
+      this.owner.field.burn(this.pos.x, this.pos.z, 1.7, B.bite.trailLife);
     }
     const rr = Math.hypot(this.pos.x, this.pos.z);
     if (this.runLeft <= 0 || rr > WORLD.radius - 2.3) {
@@ -427,7 +447,7 @@ export class BabyDragon implements Target {
         tgt.z *= (WORLD.radius - 1) / r;
       }
       field.lob(M, tgt, B.spit.flight, B.spit.peak, B.spit.radius, B.spit.zone);
-      if (this.shots === n && !this.ringDone) {
+      if (B.spit.ring > 0 && this.shots === n && !this.ringDone) {
         // 마지막: 표적 둘레를 불덩이 고리로 가둔다
         this.ringDone = true;
         const base = Math.random() * TAU;
@@ -567,11 +587,7 @@ export class BabyDragon implements Target {
       field.explode(this.goal.x, this.goal.z, C.radius, false);
       host.fx.ring(this.goal.x, this.goal.z, C.radius * 2.6, 0.6, 0xffb060);
       host.fx.particles.burst(this.tmp.set(this.goal.x, 0.6, this.goal.z), 0x7a5a42, 40, 10, 0.9, 0.4, 0.5, 6, 1.2);
-      field.wave(this.goal.x, this.goal.z, C.wave, 11, 1.3);
-      for (let b = 0; b < 4; b++) {
-        const a = (b / 4) * TAU + Math.random() * 0.5;
-        field.burn(this.goal.x + Math.cos(a) * 4.2, this.goal.z + Math.sin(a) * 4.2, 1.8, 2.4);
-      }
+      field.wave(this.goal.x, this.goal.z, C.wave, C.waveSpeed, 1.2);
       const d = Math.hypot(pl.x - this.goal.x, pl.z - this.goal.z);
       if (d < 9) player.push(this.goal.x, this.goal.z, 5 * (1 - d / 9) + 1.5);
       this.state = 'daze';
@@ -639,11 +655,11 @@ export class BabyDragon implements Target {
       const M = this.mouthPos(this.tmp);
       const n = this.shotN++;
       const q = this.tmp3;
-      if (n % 3 === 0) {
+      if (n % 4 === 0) {
         q.set(pl.x, 0, pl.z); // 곧장 겨눈다
       } else {
         const a = Math.random() * TAU;
-        const r = 2.5 + Math.random() * 6.5; // 둘레에 흩뿌린다
+        const r = C.minR + Math.random() * (C.maxR - C.minR); // 둘레에 흩뿌린다
         q.set(pl.x + Math.cos(a) * r, 0, pl.z + Math.sin(a) * r);
       }
       const rq = Math.hypot(q.x, q.z);
@@ -652,18 +668,6 @@ export class BabyDragon implements Target {
         q.z *= (WORLD.radius - 1) / rq;
       }
       field.lob(M, q, C.flight, 6, C.radius, C.zone);
-      if (n % 4 === 3) {
-        // 가끔 양옆으로 두 발 더 (부채꼴)
-        for (const sd of [-1, 1]) {
-          const f = this.tmp2.set(q.x - sd * (q.z - M.z) * 0.18, 0, q.z + sd * (q.x - M.x) * 0.18);
-          const rf = Math.hypot(f.x, f.z);
-          if (rf > WORLD.radius - 1) {
-            f.x *= (WORLD.radius - 1) / rf;
-            f.z *= (WORLD.radius - 1) / rf;
-          }
-          field.lob(M, f, C.flight + 0.1, 7, C.radius, C.zone);
-        }
-      }
       host.sfx.spit();
       host.fx.particles.burst(M, 0xffb040, 8, 6, 0.4, 0.2, 0.3, 2, 2);
       this.jaw = 1;

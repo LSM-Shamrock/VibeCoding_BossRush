@@ -259,17 +259,18 @@ export const CFG = {
       scale: 0.24, // 본체 모델 대비 크기 (몸통 길이 200 → 48, 꼬리를 줄이면 그보다 짧다)
       tail: 0.75, // 꼬리 길이 배율
       hitK: 2.0, // 몸 판정 구 배율 (모델보다 넉넉하게)
-      run: 8.6, // 걷는 속도
+      run: 6.4, // 걷는 속도
       far: 13, // 이보다 멀면 다가온다
       near: 6.5, // 이보다 가까우면 물러난다
-      gap: [1.1, 2.0], // 공격과 공격 사이
-      rage: 1.3, // 한 마리가 쓰러지면 남은 한 마리의 속도 배율
-      daze: 1.5, // 돌진 · 내리꽂기 뒤 어지러운 시간 (머리 피해 ×3)
-      bite: { tell: 0.85, speed: 33, min: 14, max: 24, count: 2, trail: 2.6 }, // 연달아 count 번 달린다. 지나간 자리에 불길이 남는다
-      spit: { windup: 0.75, count: 5, gap: 0.3, flight: 1.0, peak: 6, radius: 2.1, spread: 3.6, recover: 0.6, zone: 2.6, ring: 6 }, // 마지막에 표적 둘레로 ring 발의 불덩이
-      swoop: { alt: 30, back: 30, climb: 1.5, tell: 0.9, dive: 0.7, radius: 3.0, wave: 13 }, // alt = 도약 높이, back = 표적에서 떨어진 거리 (비스듬히 내려꽂는다)
+      gap: [2.6, 4.0], // 공격과 공격 사이
+      rage: 1.12, // 한 마리가 쓰러지면 남은 한 마리의 속도 배율
+      daze: 2.4, // 돌진 · 내리꽂기 뒤 어지러운 시간 (머리 피해 ×3)
+      bite: { tell: 1.25, speed: 24, min: 12, max: 20, count: 1, trail: 3.5, trailLife: 1.2 }, // 지나간 자리에 짧게 불길이 남는다
+      spit: { windup: 1.2, count: 3, gap: 0.55, flight: 1.25, peak: 6, radius: 2.0, spread: 5, recover: 1.0, zone: 1.4, ring: 0 }, // ring > 0 이면 마지막에 표적 둘레로 그만큼의 불덩이
+      swoop: { alt: 30, back: 30, climb: 1.5, tell: 1.4, dive: 0.8, radius: 3.0, wave: 9, waveSpeed: 6 }, // alt = 도약 높이, back = 표적에서 떨어진 거리 (비스듬히 내려꽂는다)
       // 외곽 선회 사격: 맵 가장자리를 달리며 불덩이를 흩뿌린다
-      orbit: { laps: 1.1, speed: 15, interval: 0.4, flight: 1.0, zone: 2.4, radius: 2.1 },
+      orbit: { laps: 0.7, speed: 10, interval: 1.0, flight: 1.4, zone: 1.2, radius: 1.9, minR: 4, maxR: 9 },
+      drop: { height: 70, angle: 60, time: 1.7 }, // 등장: 높이 70 에서 60° 로 비스듬히 내려온다
       sky: { alt: 255, radius: 62, speed: 13 }, // 본체가 도는 높이 · 반경 · 속도
     },
   },

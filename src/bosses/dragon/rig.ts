@@ -798,21 +798,23 @@ export class DragonRig {
   /* ───────────────────────── 배치 · 제어 ───────────────────────── */
   /** 머리를 (x,y,z) 에 두고 몸통을 뒤쪽으로 곧게 편다 (등장 · 재시작) */
   layoutLine(x: number, y: number, z: number, yaw: number, pitch: number) {
-    void pitch;
     this.head.set(x, y, z);
-    const dx = -Math.sin(yaw);
-    const dz = -Math.cos(yaw);
+    // 머리가 pitch(+ = 위) 로 나아가는 직선 → 몸통은 그 뒤쪽 직선 위에 곧게 놓인다 (비스듬히 내려오는 등장)
+    const cp = Math.cos(pitch);
+    const dx = -Math.sin(yaw) * cp;
+    const dy = -Math.sin(pitch);
+    const dz = -Math.cos(yaw) * cp;
     this.trFirst = 0;
     this.trCount = CAP;
     for (let k = 0; k < CAP; k++) {
       const p = this.trail[k];
       p.x = x + dx * (k + 1) * TS;
-      p.y = y;
+      p.y = y + dy * (k + 1) * TS;
       p.z = z + dz * (k + 1) * TS;
       p.b = 0;
     }
     this.yaw = yaw;
-    this.pitch = 0;
+    this.pitch = pitch;
     this.prevHead.copy(this.head);
     this.collapseFrom = null;
     this.collapseT = 9;
