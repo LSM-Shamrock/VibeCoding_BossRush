@@ -402,9 +402,10 @@ export class DragonRig {
 
   constructor(
     private scene: THREE.Scene,
-    opts: { light?: boolean } = {},
+    opts: { light?: boolean; gems?: boolean } = {},
   ) {
     scene.add(this.group);
+    this.showGems = opts.gems !== false;
     this.group.frustumCulled = false;
     for (let i = 0; i < NR; i++) {
       this.P.push(new V3());
@@ -532,6 +533,9 @@ export class DragonRig {
   /** 약점 보석: 이마와 가슴(배 쪽)에 박힌 노란 보석 */
   private gemMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6, 2.0, 0.3), toneMapped: false });
   private chestGem!: THREE.Group;
+  private showGems = true;
+  /** 뒷다리 뒤쪽(꼬리) 마디 간격 배율 (1 = 그대로, 0.75 = 꼬리가 3/4 길이) */
+  tailK = 1;
   private buildGems(dark: THREE.Material) {
     const geo = new THREE.OctahedronGeometry(1, 0);
     this.disposables.push(geo, this.gemMat);
@@ -546,6 +550,7 @@ export class DragonRig {
       g.traverse((o) => {
         o.frustumCulled = false;
       });
+      g.visible = this.showGems;
       parent.add(g);
       return g;
     };
@@ -948,7 +953,7 @@ export class DragonRig {
     let segL = Math.hypot(nx - px, ny - py, nz - pz);
     let acc = 0;
     for (let i = 0; i < NR; i++) {
-      const target = i * DS;
+      const target = (i <= IHL ? i : IHL + (i - IHL) * this.tailK) * DS;
       while (acc + segL < target && ni < n - 1) {
         acc += segL;
         px = nx;
@@ -1510,7 +1515,7 @@ export class DragonRig {
     const hr = this.headRoot;
     // 머리 판정구: 머리 중앙보다 약간 앞
     const hs = this.headSphere;
-    this.tv.set(0, 0.1, 1.2).applyMatrix4(hr.matrixWorld);
+    this.tv.set(0, 0.1, 1.2).applyMatrix4(hr.matrixWorld).divideScalar(this.group.scale.x); // (아기 용처럼 그룹을 줄여 쓰면 월드 → 리그 좌표로 되돌린다)
     hs.x = this.tv.x;
     hs.y = this.tv.y;
     hs.z = this.tv.z;

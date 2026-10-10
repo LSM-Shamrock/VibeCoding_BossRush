@@ -59,7 +59,7 @@ export class BabyDragon implements Target {
   private orbitDir = Math.random() < 0.5 ? 1 : -1;
   private orbitT = 3;
   private vy = 0;
-  private hy = 1.1;
+  private hy = 1.5;
   private jaw = 0.1;
   private fireK = 0;
   private flap = { hz: 0.5, amp: 0.3, fold: 0.85, phase: Math.random() * TAU };
@@ -101,8 +101,9 @@ export class BabyDragon implements Target {
     this.seq = index === 0 ? ['spit', 'bite', 'swoop', 'bite', 'spit', 'swoop'] : ['bite', 'swoop', 'spit', 'swoop', 'bite', 'spit'];
     this.seqI = 0;
     this.attackT = 1.2 + index * 1.7;
-    this.rig = new DragonRig(owner.host.scene, { light: false });
+    this.rig = new DragonRig(owner.host.scene, { light: false, gems: false });
     this.rig.group.scale.setScalar(S);
+    this.rig.tailK = B.tail;
     this.rig.wing.hz = 1;
     this.rig.layoutLine(x / S, 70 / S, z / S, this.yaw, 0);
     this.rig.setRage(0);
@@ -259,7 +260,7 @@ export class BabyDragon implements Target {
     if (rr > WORLD.radius - 4.5) goal = Math.atan2(-this.pos.x, -this.pos.z);
     this.turn(goal, 4.2, dt);
     this.walk(sp, dt);
-    this.hy = approach(this.hy, 1.1 + Math.sin(this.t * 6) * 0.05, 8, dt);
+    this.hy = approach(this.hy, 1.5 + Math.sin(this.t * 6) * 0.06, 8, dt);
     this.pos.y = this.hy;
     this.pitch = approach(this.pitch, 0, 6, dt);
     this.lookYaw = approach(this.lookYaw, clamp(wrapPi(toP - this.yaw), -1, 1), 6, dt);
@@ -295,7 +296,7 @@ export class BabyDragon implements Target {
     if (this.sub === 0) {
       const toP = this.angToPlayer();
       if (this.t < tell * 0.6) this.turn(toP, 9, dt);
-      this.hy = approach(this.hy, 0.8, 10, dt);
+      this.hy = approach(this.hy, 1.2, 10, dt);
       this.pos.y = this.hy;
       this.pitch = approach(this.pitch, -0.12, 8, dt);
       this.jaw = approach(this.jaw, 0.5, 8, dt);
@@ -332,7 +333,7 @@ export class BabyDragon implements Target {
     this.runLeft -= step;
     this.speed = sp;
     this.gait += dt * 20;
-    this.hy = 0.9;
+    this.hy = 1.3;
     this.pos.y = this.hy;
     this.clampArena();
     this.jaw = 1;
@@ -356,7 +357,7 @@ export class BabyDragon implements Target {
     const wind = B.spit.windup / this.rage;
     const toP = this.angToPlayer();
     this.turn(toP, 6, dt);
-    this.hy = approach(this.hy, 2.5, 6, dt);
+    this.hy = approach(this.hy, 3.4, 6, dt);
     this.pos.y = this.hy;
     this.pitch = approach(this.pitch, 0.42, 6, dt);
     this.lookYaw = approach(this.lookYaw, 0, 8, dt);
@@ -472,7 +473,7 @@ export class BabyDragon implements Target {
     const e = k * k;
     this.pos.x = this.from.x + (this.goal.x - this.from.x) * e;
     this.pos.z = this.from.z + (this.goal.z - this.from.z) * e;
-    this.pos.y = this.from.y + (0.9 - this.from.y) * e;
+    this.pos.y = this.from.y + (1.3 - this.from.y) * e;
     this.hy = this.pos.y;
     this.yaw = Math.atan2(this.goal.x - this.from.x, this.goal.z - this.from.z);
     this.pitch = -1.0 * Math.min(1, k * 3);
@@ -502,7 +503,7 @@ export class BabyDragon implements Target {
     this.dazeT -= dt;
     this.speed = approach(this.speed, 0, 6, dt);
     this.walk(this.speed * 0.5, dt);
-    this.hy = approach(this.hy, 0.8, 8, dt);
+    this.hy = approach(this.hy, 1.2, 8, dt);
     this.pos.y = this.hy;
     this.pitch = approach(this.pitch, -0.2, 6, dt);
     this.jaw = approach(this.jaw, 0.35, 6, dt);
@@ -556,7 +557,7 @@ export class BabyDragon implements Target {
 
   private updateDying(dt: number) {
     const { host } = this.owner;
-    this.hy = approach(this.hy, 0.7, 5, dt);
+    this.hy = approach(this.hy, 1.0, 5, dt);
     this.pos.y = this.hy;
     this.pitch = approach(this.pitch, -0.5, 4, dt);
     this.yaw += dt * 2.2;
@@ -621,7 +622,7 @@ export class BabyDragon implements Target {
       s.x = ps[i].x * S;
       s.y = ps[i].y * S;
       s.z = ps[i].z * S;
-      s.r = ps[i].r * S * 1.3;
+      s.r = ps[i].r * S * B.hitK + 0.25;
     }
     // 날갯짓 소리 (공중에 떠 있을 때만)
     if (this.alive && this.pos.y > 3 && this.flap.fold < 0.5) {
@@ -653,11 +654,11 @@ export class BabyDragon implements Target {
       const rr = s.r + r;
       if (dx * dx + dy * dy + dz * dz < rr * rr) {
         const k = ps[i].kind;
-        if (k === 'head' || k === 'chest') {
-          kind = 'head'; // 이마 · 가슴 보석은 같은 약점
+        if (k === 'head') {
+          kind = 'head'; // 아기 용은 머리만 약점
           break;
         }
-        if (!kind) kind = k;
+        if (!kind) kind = k === 'chest' ? 'body' : k;
       }
     }
     if (!kind) return 0;
