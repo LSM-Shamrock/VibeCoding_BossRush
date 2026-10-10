@@ -10,8 +10,8 @@ const V3 = THREE.Vector3;
 const D = CFG.dragon;
 const TAU = Math.PI * 2;
 
-export type AttackName = 'spit' | 'strafe' | 'swoop' | 'meteor' | 'crash' | 'sunray' | 'gale' | 'eruption' | 'vortex' | 'scythe' | 'roar';
-export const SEQUENCE_ATTACKS: AttackName[] = ['spit', 'strafe', 'swoop', 'meteor', 'crash', 'sunray', 'gale', 'eruption', 'vortex', 'scythe'];
+export type AttackName = 'spit' | 'strafe' | 'swoop' | 'meteor' | 'crash' | 'sunray' | 'gale' | 'wind' | 'vortex' | 'scythe' | 'roar';
+export const SEQUENCE_ATTACKS: AttackName[] = ['spit', 'strafe', 'swoop', 'meteor', 'crash', 'sunray', 'gale', 'wind', 'vortex', 'scythe'];
 
 export function buildAttack(name: AttackName, s: Dragon): AttackScript {
   const sc = build(name, s);
@@ -35,8 +35,8 @@ function build(name: AttackName, s: Dragon): AttackScript {
       return sunray(s);
     case 'gale':
       return gale(s);
-    case 'eruption':
-      return eruption(s);
+    case 'wind':
+      return wind(s);
     case 'vortex':
       return vortex(s);
     case 'scythe':
@@ -682,74 +682,120 @@ function gale(s: Dragon): AttackScript {
   return { steps, end: tEnd + 2.0 };
 }
 
-/* ───────────────────────── 불기둥 연쇄 ─────────────────────────
- * 용이 하늘 높이서 포효하면 플레이어가 서 있던 자리 둘레로 나선을 그리며 바닥이 차례로 갈라져 불기둥이 치솟는다.
- * 고리가 차오르는 동안 벗어나면 되지만, 다음 고리가 또 앞을 막는다. (페이즈 3은 나선 두 줄)
+/* ───────────────────────── 폭풍 날갯짓 ─────────────────────────
+ * 아레나 가장자리 하늘에서 날개를 높이 들었다가 힘껏 내리친다. 내리칠 때마다 아레나를 가로지르는 돌풍의 벽이 밀려오며 몸을 밀어내고 닿으면 피해를 준다.
+ * 벽에는 바람이 비는 틈이 하나 있고(틈은 내리치기 전 먼지 줄기로 보인다), 점프로 넘거나 대시(무적)로 뚫을 수도 있다.
  */
-function eruption(s: Dragon): AttackScript {
+function wind(s: Dragon): AttackScript {
   const ph = s.phaseIndex;
-  const C = D.eruption;
-  const n = C.count[ph];
+  const C = D.wind;
+  const n = C.gusts[ph];
   const gap = C.gap[ph];
-  const R = C.radius;
-  const t1 = 1.5;
-  const arms = ph >= 2 ? 2 : 1;
-  const spin = Math.random() < 0.5 ? 1 : -1;
+  const hole = C.hole[ph];
+  const t1 = 2.0;
   const a0 = Math.random() * TAU;
-  const c = new V3();
+  const dx = -Math.cos(a0); // 돌풍이 나아가는 방향 (용 → 아레나 맞은편)
+  const dz = -Math.sin(a0);
+  const px = -dz; // 좌우 방향
+  const pz = dx;
+  const S = new V3(-dx * C.start, 0, -dz * C.start); // 돌풍이 출발하는 선의 중심
+  const hoverPt = new V3(-dx * 31, 34, -dz * 31);
+  const holes: number[] = [];
+  for (let k = 0; k < n; k++) holes.push((Math.random() * 2 - 1) * C.holeRange);
+  let tt = 0;
+  const P = new V3();
   const steps: Step[] = [
     {
       at: 0,
       fn: () => {
-        c.copy(ahead(s, 0.5));
         s.look('player');
-        s.rig.jaw = 0.9;
-        s.rig.fire = 0.8;
-        s.setWings({ hz: 0.9, amp: 0.7, raise: 0.5 });
-        s.rig.armPose = 'roar'; s.rig.legPose = 'roar';
-        s.cruiseOverride = { alt: 42, radius: 11 };
+        s.rig.jaw = 0.3;
+        s.setWings({ hz: 1.1, amp: 0.7, raise: 0.5 });
+        s.rig.armPose = 'flex'; s.rig.legPose = 'trail';
+        s.fly([hoverPt], 1.5, 'io', () => s.hoverAt(hoverPt, 3, Math.atan2(dx, dz), 0.05));
         s.host.sfx.roar();
-        s.host.banner('불기둥', '발밑이 갈라진다 — 고리가 차기 전에 벗어나라', 1.8);
-        s.host.skyPulse?.(0.8);
-        s.host.shake(0.5, 0.3);
+        s.host.banner('폭풍 날갯짓', '돌풍의 벽 — 틈으로 빠지거나, 점프 · 대시로 넘어라', 2.0);
+        s.host.skyPulse?.(0.7);
+      },
+    },
+    {
+      at: 0.1,
+      fn: () => {
+        s.onTick((dt) => {
+          tt += dt;
+          const pl = s.player;
+          for (let k = 0; k < n; k++) {
+            const ts = t1 + k * gap; // 내리치는 순간
+            // 내리치기 전: 출발선에 먼지 줄기가 일렁인다 (틈은 비어 있다)
+            if (tt > ts - C.tell && tt < ts) {
+              for (let q = 0; q < 5; q++) {
+                const lat = (Math.random() * 2 - 1) * C.width;
+                if (Math.abs(lat - holes[k]) < hole) continue;
+                P.set(S.x + px * lat, 0.5 + Math.random() * 1.6, S.z + pz * lat);
+                s.host.fx.particles.burst(P, 0xcfdcff, 1, 1.5, 0.5, 0.1, 0.2, 0, 1.6);
+              }
+            }
+            const u = (tt - ts) * C.speed;
+            if (u < 0 || u > C.reach) continue;
+            // 돌풍의 벽: 앞으로 밀려가며 먼지와 바람줄기를 흩뿌린다
+            const cx = S.x + dx * u;
+            const cz = S.z + dz * u;
+            for (let q = 0; q < 14; q++) {
+              const lat = (Math.random() * 2 - 1) * C.width;
+              if (Math.abs(lat - holes[k]) < hole) continue;
+              P.set(cx + px * lat - dx * Math.random() * C.thick, 0.3 + Math.random() * 2.6, cz + pz * lat - dz * Math.random() * C.thick);
+              s.host.fx.particles.burst(P, Math.random() < 0.6 ? 0xdfe9ff : 0x9a8a78, 1, 2.5, 0.5, 0.12, 0.15, 0, 1.4);
+            }
+            if (pl.dead) continue;
+            const rx = pl.pos.x - S.x;
+            const rz = pl.pos.z - S.z;
+            const along = rx * dx + rz * dz - u;
+            const lat = rx * px + rz * pz;
+            if (Math.abs(lat) > C.width + 2 || Math.abs(lat - holes[k]) < hole) continue;
+            if (Math.abs(along) < C.thick * 0.5 + pl.hitRadius) {
+              // 닿으면 피해 (점프로 넘으면 안전, 대시는 무적)
+              if (pl.pos.y < 1.3) pl.takeDamage(pl.pos.x - dx, pl.pos.z - dz);
+            }
+            if (along > -9 && along < C.thick * 0.5) pl.push(pl.pos.x - dx, pl.pos.z - dz, 55 * dt); // 벽이 몸을 밀어낸다
+          }
+        });
       },
     },
   ];
-  for (let i = 0; i < n; i++) {
-    for (let arm = 0; arm < arms; arm++) {
-      steps.push({
-        at: t1 + i * gap,
-        fn: () => {
-          // 바깥에서 안쪽으로 조여 들어오는 나선. 마지막 몇 개는 중심을 직접 겨눈다
-          const k = i / Math.max(1, n - 1);
-          const rad = 11.5 * (1 - k) + 1.2;
-          const a = a0 + spin * i * 0.78 + arm * Math.PI;
-          const q = inArena(new V3(c.x + Math.cos(a) * rad, 0, c.z + Math.sin(a) * rad), 1.2);
-          if (i >= n - 2 && arm === 0) q.copy(ahead(s, 0.3));
-          s.host.fx.telegraphs.circle(q.x, q.z, R, C.tell, () => {
-            s.field.explode(q.x, q.z, R, true);
-            if (C.zone[ph] > 0) s.field.burn(q.x, q.z, R * 0.8, C.zone[ph]);
-            s.host.fx.particles.burst(new V3(q.x, 1.2, q.z), 0xff7a28, 36, 14, 1.1, 0.3, 1.2, 6, 2); // 위로 솟는 불기둥
-            s.host.fx.particles.burst(new V3(q.x, 0.6, q.z), 0xffe0a0, 14, 8, 0.8, 0.2, 1.4, 4, 2);
-            s.host.fx.ring(q.x, q.z, R * 1.7, 0.5, 0xffb060);
-          });
-          if (i % 2 === 0) s.host.sfx.telegraph();
-        },
-      });
-    }
+  for (let k = 0; k < n; k++) {
+    const ts = t1 + k * gap;
+    steps.push({
+      at: ts - C.tell,
+      fn: () => {
+        s.setWings({ hz: 0.2, amp: 0, raise: 1.1, spread: 1 });
+        s.rig.armPose = 'roar'; s.rig.legPose = 'roar';
+        s.host.sfx.telegraph();
+      },
+    });
+    steps.push({
+      at: ts,
+      fn: () => {
+        s.setWings({ hz: 0, amp: 0, raise: -0.7, spread: 1 });
+        s.rig.armPose = 'brace'; s.rig.legPose = 'brace';
+        s.host.sfx.wingbeat(2);
+        s.host.shake(0.9, 0.3);
+        s.host.fx.burstLight(new V3(S.x, 3, S.z), 0xcfe0ff, 140, 0.4);
+        s.host.fx.particles.burst(new V3(S.x, 1.5, S.z), 0xdfe9ff, 30, 12, 0.8, 0.14, 0.2, 0, 1.4);
+      },
+    });
+    steps.push({ at: ts + 0.45, fn: () => { s.setWings({ hz: 0.9, amp: 0.4, raise: 0.4 }); s.rig.armPose = 'flex'; s.rig.legPose = 'trail'; } });
   }
-  const tEnd = t1 + (n - 1) * gap + C.tell;
+  const tEnd = t1 + (n - 1) * gap + C.reach / C.speed;
   steps.push({
-    at: tEnd + 0.3,
+    at: tEnd + 0.4,
     fn: () => {
-      s.rig.fire = 0;
       s.rig.jaw = 0.1;
       s.look('off');
-      s.cruiseOverride = null;
+      s.setWings({ hz: 1.0, amp: 0.6, raise: 0.15 });
       s.rig.armPose = 'tuck'; s.rig.legPose = 'trail';
     },
   });
-  return { steps, end: tEnd + 1.5 };
+  return { steps, end: tEnd + 1.3 };
 }
 
 /* ───────────────────────── 불꽃 바퀴 ─────────────────────────

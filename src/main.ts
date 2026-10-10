@@ -174,7 +174,7 @@ class Game implements Host {
     this.hud.showOverlay(
       'DEEP NEST',
       `1층 · 거미굴 — <b>동굴 여왕 거미</b><br>
-       <span style="color:#a8957c">${this.binds.moveSummary()} 이동 · 마우스 시점 회전 · 왼쪽 버튼 길게 눌러 불꽃 모으기(떼면 발사) · ${this.binds.label('lockon')} 락온 · ${this.binds.label('dash')} 대시(무적) · ${this.binds.label('special')} 특수기</span><br>
+       <span style="color:#a8957c">${this.binds.moveSummary()} 이동 · 마우스 시점 회전 · 왼쪽 버튼 길게 눌러 불꽃 모으기(떼면 발사) · ${this.binds.label('lockon')} 락온 · ${this.binds.label('dash')} 대시(무적) · ${this.binds.label('jump')} 점프 · ${this.binds.label('special')} 특수기</span><br>
        <span style="color:#a8957c">예고선과 바닥 마커가 보이면 피하고, 거미의 몸이 곧 신호다. 배(주황빛)가 약점.</span><br>
        <span style="color:#a8957c">Esc 로 일시정지 — 그 화면에서 키를 바꿀 수 있습니다.</span><br>
        ${this.diffPicker()}
@@ -699,7 +699,7 @@ class Game implements Host {
 
   /** 시점 중심 높이: 위를 볼수록 올라간다 */
   private pivotY() {
-    return CFG.camera.pivotY + Math.max(0, -Math.sin(this.camPitch)) * CFG.camera.lookUpLift;
+    return CFG.camera.pivotY + this.player.pos.y * 0.75 + Math.max(0, -Math.sin(this.camPitch)) * CFG.camera.lookUpLift;
   }
 
   /**

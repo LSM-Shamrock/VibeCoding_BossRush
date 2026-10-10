@@ -57,6 +57,8 @@ export class Player {
 
   dashT = 0;
   dashCd = 0;
+  /** 점프: 세로 속도 (pos.y 가 높이) */
+  private velY = 0;
   private dashInv = 0;
   private dashDir = new V3(0, 0, -1);
 
@@ -400,6 +402,21 @@ export class Player {
     if (this.drawn) this.flash = Math.max(this.flash, this.charge * 0.7);
     this.updateBow();
 
+    // 점프
+    if (input.tapped('jump') && this.pos.y <= 0.001 && this.slowT <= 0) {
+      this.velY = 14;
+      this.host.fx.particles.burst(this.tmpA.set(this.pos.x, 0.15, this.pos.z), 0xd9b87c, 8, 3.5, 0.35, 0.1, 0.2);
+    }
+    if (this.pos.y > 0 || this.velY > 0) {
+      this.velY -= 38 * dt;
+      this.pos.y += this.velY * dt;
+      if (this.pos.y <= 0) {
+        this.pos.y = 0;
+        if (this.velY < -6) this.host.fx.particles.burst(this.tmpA.set(this.pos.x, 0.15, this.pos.z), 0xd9b87c, 10, 4, 0.4, 0.12, 0.2);
+        this.velY = 0;
+      }
+    }
+
     // 특수기
     if (input.tapped('special') && this.gauge >= CFG.special.max && this.lampState === 'on' && !this.sp.active) this.startSpecial(this.throwAim ?? aim);
 
@@ -411,6 +428,12 @@ export class Player {
     this.legR.rotation.x = -Math.sin(this.walkPhase) * amp;
     this.armL.rotation.set(0.2 + Math.sin(this.walkPhase) * 0.25 * spd, 0, -0.18);
     this.body.position.y = Math.abs(Math.sin(this.walkPhase)) * 0.06 * spd;
+    if (this.pos.y > 0.05) {
+      // 공중: 다리를 접는다
+      this.legL.rotation.x = -0.7;
+      this.legR.rotation.x = 0.35;
+      this.body.position.y = 0;
+    }
     this.body.rotation.z = 0;
   }
 
@@ -441,7 +464,7 @@ export class Player {
     const mx = -0.27;
     return out.set(
       this.pos.x + mx * Math.cos(this.yaw) + mz * Math.sin(this.yaw),
-      1.12,
+      1.12 + this.pos.y,
       this.pos.z - mx * Math.sin(this.yaw) + mz * Math.cos(this.yaw),
     );
   }
@@ -525,6 +548,8 @@ export class Player {
     this.body.position.y = 0.02 + (1 - k) * 0.05;
     this.vel.multiplyScalar(Math.max(0, 1 - 10 * dt));
     this.pos.addScaledVector(this.vel, dt);
+    this.velY = 0;
+    this.pos.y = Math.max(0, this.pos.y - 25 * dt);
   }
 
   respawn() {
@@ -534,6 +559,8 @@ export class Player {
     this.gauge = 0;
     this.dashCd = 0;
     this.dashT = 0;
+    this.pos.y = 0;
+    this.velY = 0;
     this.lampState = 'relighting';
     this.relightT = 0;
     this.lanternScale = 0;
@@ -643,7 +670,7 @@ export class Player {
 
   /* ───────────── 망토 ───────────── */
   private capeAnchor() {
-    return this.tmpA.set(this.pos.x - Math.sin(this.yaw) * 0.22, 1.15 + this.body.position.y, this.pos.z - Math.cos(this.yaw) * 0.22);
+    return this.tmpA.set(this.pos.x - Math.sin(this.yaw) * 0.22, 1.15 + this.pos.y + this.body.position.y, this.pos.z - Math.cos(this.yaw) * 0.22);
   }
 
   private updateCape(dt: number) {

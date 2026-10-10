@@ -564,7 +564,7 @@ export class Dragon implements Boss {
       if (s.kind === 'wing') continue;
       // 몸통에 닿는 순간 바로 피해 (바닥에 누워 있어도 마찬가지). 플레이어가 몸통 벽에 막히는 거리보다 약간 넓게 잡아, 막히기 전에 반드시 맞는다
       const R = s.r * 0.82 + 0.5 + 0.2;
-      if (Math.hypot(pl.x - s.x, pl.z - s.z) < R && Math.abs(s.y - 0.9) < s.r + 1.2) {
+      if (Math.hypot(pl.x - s.x, pl.z - s.z) < R && Math.abs(s.y - (0.9 + pl.y)) < s.r + 1.2) {
         // 연속 접촉은 플레이어의 무적 시간(invuln)이 막아 준다
         if (this.player.takeDamage(s.x, s.z)) this.bodyHitCd = 0.15;
         return;

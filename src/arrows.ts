@@ -85,7 +85,7 @@ export class Arrows {
   }
 
   update(dt: number) {
-    const lim = WORLD.radius + 10; // 맵 바깥(이무기 외곽 구역)까지 날아간다
+    const lim = Math.max(WORLD.radius + 10, 420); // 맵 바깥, 하늘 높이 떠 있는 용까지 날아간다
     let lead: Fireball | null = null;
     for (const a of this.pool) {
       if (!a.active) continue;
@@ -112,7 +112,7 @@ export class Arrows {
       }
       const p = a.group.position;
       const floor = p.y < 0.05;
-      const out = p.y > 30 || a.life <= 0 || p.x * p.x + p.z * p.z > lim * lim;
+      const out = p.y > 320 || a.life <= 0 || p.x * p.x + p.z * p.z > lim * lim;
       if (hit || floor || out) {
         // BLOCKED(-1): 다리 등에 막힘 → 불꽃만 꺼지고 데미지/게이지는 없음
         if (hit && dealtNow > 0) this.onDealt(dealtNow);

@@ -2,7 +2,7 @@
  * 키 설정. 동작(ActionId) 하나에 키를 최대 2개(기본/보조)까지 지정할 수 있다.
  * 키는 물리적 위치(KeyboardEvent.code)로 저장하므로 한/영 전환이나 자판 배열과 무관하게 동작한다.
  */
-export type ActionId = 'up' | 'down' | 'left' | 'right' | 'dash' | 'special' | 'lockon' | 'mute' | 'retry';
+export type ActionId = 'up' | 'down' | 'left' | 'right' | 'dash' | 'jump' | 'special' | 'lockon' | 'mute' | 'retry';
 
 export interface ActionInfo {
   id: ActionId;
@@ -17,8 +17,9 @@ export const ACTIONS: readonly ActionInfo[] = [
   { id: 'down', label: '아래로 이동', hint: '', group: 'move', defaults: ['KeyS', 'ArrowDown'] },
   { id: 'left', label: '왼쪽으로 이동', hint: '', group: 'move', defaults: ['KeyA', 'ArrowLeft'] },
   { id: 'right', label: '오른쪽으로 이동', hint: '', group: 'move', defaults: ['KeyD', 'ArrowRight'] },
-  { id: 'dash', label: '대시', hint: '짧은 무적', group: 'combat', defaults: ['Space', null] },
-  { id: 'special', label: '특수기', hint: '게이지가 가득 찼을 때', group: 'combat', defaults: ['ShiftLeft', 'ShiftRight'] },
+  { id: 'dash', label: '대시', hint: '짧은 무적', group: 'combat', defaults: ['ShiftLeft', 'ShiftRight'] },
+  { id: 'jump', label: '점프', hint: '작은 몸집의 적을 뛰어넘는다', group: 'combat', defaults: ['Space', null] },
+  { id: 'special', label: '특수기', hint: '게이지가 가득 찼을 때', group: 'combat', defaults: ['KeyQ', null] },
   { id: 'lockon', label: '락온 (보스 주시)', hint: '마우스 휠 클릭으로도 가능', group: 'combat', defaults: ['KeyE', null] },
   { id: 'mute', label: '소리 켜기/끄기', hint: '', group: 'system', defaults: ['KeyM', null] },
   { id: 'retry', label: '재도전', hint: '패배·클리어 화면에서', group: 'system', defaults: ['KeyR', null] },
@@ -29,7 +30,7 @@ export const actionLabel = (id: ActionId) => INFO.get(id)!.label;
 
 type Pair = [string | null, string | null];
 
-const STORE_KEY = 'deepnest.keys.v1';
+const STORE_KEY = 'deepnest.keys.v2';
 
 /* ───────────── 지정할 수 없는 키 ───────────── */
 const FIXED_REASON: Record<string, string> = {

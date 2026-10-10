@@ -51,7 +51,7 @@ export const CFG = {
     damageCurve: 1.5, // 클수록 많이 모은 쪽에 위력이 몰린다 (1 = 비례). 2.5 → 1.5: 덜 모은 불꽃과 완전 차징의 차이를 줄임 (위력 = 최소 + (최대-최소) × 차징^곡선)
     speed: [22, 44],
     radius: [0.2, 0.5],
-    life: 1.3,
+    life: 9, // 하늘 높이 떠 있는 용까지 닿을 만큼 오래 난다
     pool: 40,
   },
 
@@ -223,9 +223,9 @@ export const CFG = {
     idle: [1.7, 1.2, 0.85],
 
     sequence: [
-      ['spit', 'strafe', 'eruption', 'swoop', 'vortex', 'spit', 'strafe', 'swoop'],
-      ['meteor', 'strafe', 'eruption', 'crash', 'vortex', 'spit', 'swoop', 'meteor', 'scythe', 'strafe', 'crash'],
-      ['sunray', 'vortex', 'gale', 'eruption', 'strafe', 'scythe', 'crash', 'meteor', 'sunray', 'swoop', 'gale', 'scythe', 'eruption', 'crash'],
+      ['spit', 'strafe', 'wind', 'swoop', 'vortex', 'spit', 'strafe', 'swoop'],
+      ['meteor', 'strafe', 'wind', 'crash', 'vortex', 'spit', 'swoop', 'meteor', 'scythe', 'strafe', 'crash'],
+      ['sunray', 'vortex', 'gale', 'wind', 'strafe', 'scythe', 'crash', 'meteor', 'sunray', 'swoop', 'gale', 'scythe', 'wind', 'crash'],
     ],
 
     // 화염탄: 입에 불을 모았다가 불덩이를 연달아 던진다. 착지 고리가 차오른다. (페이즈 2~: 바닥에 불이 남는다)
@@ -243,7 +243,7 @@ export const CFG = {
     // 날개 충격파 (페이즈 3): 제단 위에서 날개를 내리칠 때마다 땅을 훑는 불꽃 고리가 퍼진다
     gale: { beats: 4, gap: 1.35, tell: 0.85, speed: 14, width: 1.5, radius: 3.8 },
     // 불기둥 연쇄: 플레이어 둘레로 나선을 그리며 연달아 불기둥이 치솟는다 (페이즈 3은 나선 두 줄)
-    eruption: { count: [7, 9, 12], gap: [0.28, 0.23, 0.18], tell: 0.95, radius: 3.2, zone: [0, 3, 4] },
+    wind: { gusts: [3, 4, 5], gap: [1.7, 1.5, 1.3], tell: 0.9, speed: 19, reach: 62, start: 30, thick: 3.6, width: 26, hole: [5.5, 4.8, 4.2], holeRange: 14 },
     // 불꽃 바퀴: 제단 중앙에서 뻗는 불길 줄기들이 풍차처럼 돌며 차례로 터진다. 줄기 사이 빈 쐐기로 피한다
     vortex: { spokes: [2, 3, 4], steps: [5, 6, 8], gap: [0.62, 0.52, 0.42], tell: [1.05, 0.95, 0.85], width: 5.6, turn: 0.52 },
     // 회전 광선: 하늘에서 쏟아지는 광선이 제단 위를 구불구불 쓸고 다닌다. 지나간 자리는 불탄다
