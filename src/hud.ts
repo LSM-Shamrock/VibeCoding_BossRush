@@ -34,6 +34,8 @@ export class Hud {
   private bossChip = $('bosschip');
   private bossMarks = $('bossmarks');
   private bossTag = $('bosstag');
+  private bossTrack = $('bosstrack');
+  private bossSub = $('bosssub');
   private barShown = 1;
   private barT = 0;
   private barBoss: BossInfo | null = null;
@@ -132,6 +134,21 @@ export class Hud {
       this.bossChip.style.width = `${(frac * 100).toFixed(1)}%`;
       this.bossTag.classList.toggle('on', b.exposed && b.alive);
       this.bossFill.classList.toggle('exposed', b.exposed && b.alive);
+      // 아기 용 전투 중에는 체력바를 둘로 나눠 한 마리씩 보여준다
+      const sub = b.subBars;
+      const has = !!sub && sub.length > 0;
+      this.bossSub.classList.toggle('hidden', !has);
+      this.bossTrack.style.display = has ? 'none' : '';
+      if (has) {
+        const bars = this.bossSub.children;
+        for (let i = 0; i < bars.length; i++) {
+          const el = bars[i] as HTMLElement;
+          const f = sub![i] ? Math.max(0, Math.min(1, sub![i].hp / sub![i].max)) * Math.min(1, s.bossReveal) : 0;
+          el.classList.toggle('dead', !sub![i] || sub![i].hp <= 0);
+          (el.children[0] as HTMLElement).style.width = `${(f * 100).toFixed(1)}%`;
+          (el.children[1] as HTMLElement).style.width = `${(f * 100).toFixed(1)}%`;
+        }
+      }
     }
 
     const st =

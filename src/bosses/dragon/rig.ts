@@ -400,7 +400,10 @@ export class DragonRig {
   private pv = new V3();
   private ev = new THREE.Euler(0, 0, 0, 'YXZ');
 
-  constructor(private scene: THREE.Scene) {
+  constructor(
+    private scene: THREE.Scene,
+    opts: { light?: boolean } = {},
+  ) {
     scene.add(this.group);
     this.group.frustumCulled = false;
     for (let i = 0; i < NR; i++) {
@@ -491,7 +494,7 @@ export class DragonRig {
     this.buildGems(dark);
     this.headSphere = { x: 0, y: 0, z: 0, r: 4.0, kind: 'head' };
     this.mouthLight = new THREE.PointLight(0xff7a28, 0, 46, 1.4);
-    this.headRoot.add(this.mouthLight);
+    if (opts.light !== false) this.headRoot.add(this.mouthLight); // 아기 용은 조명을 달지 않는다 (씬의 조명 수가 늘면 재질이 다시 컴파일된다)
     this.mouthLight.position.set(0, -0.3, 3.2);
     this.mouthGlow = new THREE.Mesh(
       new THREE.SphereGeometry(0.5, 14, 10),

@@ -53,6 +53,13 @@
       #bossfill { background: linear-gradient(90deg, #8f1b1b, #e24a2e); transition: width .12s linear; }
       #bosschip { background: rgba(255,226,180,.6); transition: width .5s ease .2s; }
       #bossmarks i { position: absolute; top: 0; width: 2px; height: 100%; background: rgba(255,226,180,.85); transform: translateX(-1px); z-index: 2; }
+      #bosssub { display: flex; gap: 10px; }
+      #bosssub.hidden { display: none; }
+      #bosssub .sb { position: relative; flex: 1; height: 12px; background: rgba(10,3,1,.7); border: 1px solid rgba(255,205,130,.55); border-radius: 2px; overflow: hidden; box-shadow: 0 0 0 2px rgba(10,3,1,.55), 0 0 14px rgba(255,120,40,.25); }
+      #bosssub .sb i { position: absolute; left: 0; top: 0; height: 100%; width: 100%; }
+      #bosssub .sf { background: linear-gradient(90deg, #8f1b1b, #e24a2e); transition: width .12s linear; }
+      #bosssub .sc { background: rgba(255,226,180,.6); transition: width .5s ease .2s; }
+      #bosssub .sb.dead { opacity: .35; }
       #bossfill.exposed { background: linear-gradient(90deg, #d9962b, #ffd27a); }
       #bosstag { height: 18px; margin-top: 5px; font-size: 12px; font-weight: 700; letter-spacing: .12em; color: var(--gold); opacity: 0; transition: opacity .1s; }
       #bosstag.on { opacity: 1; animation: blink .5s infinite alternate; }
@@ -195,6 +202,7 @@
       <div id="bossbar" class="hidden">
         <div id="bossname"></div>
         <div id="bosstrack"><div id="bosschip"></div><div id="bossfill"></div><div id="bossmarks"></div></div>
+        <div id="bosssub" class="hidden"><div class="sb"><i class="sc"></i><i class="sf"></i></div><div class="sb"><i class="sc"></i><i class="sf"></i></div></div>
         <div id="bosstag">약점 노출!</div>
       </div>
 

@@ -34,6 +34,8 @@ export interface BossInfo {
   readonly phaseMarks: number[];
   /** 지금 페이즈 (0부터) */
   readonly phaseIndex: number;
+  /** 있으면 체력바를 이 개수만큼 나눠 각각 보여준다 (용의 1페이즈: 아기 용 한 마리당 한 줄) */
+  readonly subBars?: readonly { hp: number; max: number }[];
 }
 
 /** 공격 스크립트의 한 단계: at(초)에 fn 실행 */

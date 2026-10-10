@@ -123,6 +123,8 @@ export class Dragon implements Boss, BabyOwner {
   private babies: BabyDragon[] = [];
   private babyState: 'none' | 'fight' | 'descend' = 'none';
   private descendT = 0;
+  /** 처음부터 하늘을 날고 있는 등장 (1페이즈 아기 용 전투) */
+  private skyIntro = false;
 
   private tmp = new V3();
   private tmp2 = new V3();
@@ -140,7 +142,11 @@ export class Dragon implements Boss, BabyOwner {
   }
 
   /* ───────────────────────── 접근자 ───────────────────────── */
+  get subBars() {
+    return this.babyMode && this.babies.length > 0 ? this.babies.map((b) => ({ hp: b.hp, max: b.maxHp })) : undefined;
+  }
   get name() {
+    if (this.babyMode) return `${D.name} · 새끼들`;
     return this.phaseIndex === 0 ? D.name : `${D.name} · ${this.phaseIndex === 1 ? '분노' : '광란'}`;
   }
   get pos() {
@@ -157,6 +163,7 @@ export class Dragon implements Boss, BabyOwner {
       }
       if (n > 0) return this.posXZ.set(x / n, 0, z / n);
     }
+    if (this.skyIntro) return this.posXZ.set(0, 0, -4);
     return this.posXZ.set(this.p.x, 0, this.p.z);
   }
   /** 아기 용 전투 중인가 (본체는 높은 하늘을 돌며 공격하지 않는다) */
@@ -212,6 +219,26 @@ export class Dragon implements Boss, BabyOwner {
     this.enterStage = 0;
     this.enterDrop = drop;
     const r = this.rig;
+    if (this.maxHp * D.phaseAt[0] < this.hp) {
+      // 처음부터 하늘 높이 날고 있다 — 아기 용 둘이 먼저 내려와 싸운다
+      this.skyIntro = true;
+      this.yaw = 0;
+      this.pitch = 0;
+      this.speed = D.baby.sky.speed;
+      this.p.set(D.baby.sky.radius, D.baby.sky.alt, 0);
+      this.cx = 0;
+      this.cz = 0;
+      r.head.copy(this.p);
+      r.layoutLine(this.p.x, this.p.y, this.p.z, 0, 0);
+      r.undulate = 0.5;
+      r.rage = 0;
+      this.setWings({ hz: 0.3, amp: 0.34, fold: 0, raise: 0.12, spread: 1 });
+      this.relax();
+      this.syncRig(0);
+      r.update(0);
+      this.lockPos.copy(this.p);
+      return;
+    }
     this.yaw = 0;
     this.pitch = -0.2;
     this.speed = 40;
@@ -236,7 +263,7 @@ export class Dragon implements Boss, BabyOwner {
     this.enterT += dt;
     const { host, rig } = this;
     const m = this.move;
-    const k = m ? m.t / m.dur : 1;
+    const k = this.skyIntro ? clamp(this.enterT / 1.3, 0, 1) : m ? m.t / m.dur : 1;
     // 아레나 위를 가로지르는 순간 포효 + 등장 카드
     const beatAt = this.enterDrop ? 0.5 : 0.35;
     if (this.enterStage === 0 && k >= beatAt) {
@@ -259,7 +286,7 @@ export class Dragon implements Boss, BabyOwner {
       rig.jaw = 0.1;
       this.look('off');
     }
-    if (this.enterStage >= 1 && !this.move) this.finishIntro();
+    if (this.enterStage >= 1 && !this.move && (!this.skyIntro || this.enterT >= 1.6)) this.finishIntro();
   }
 
   private finishIntro() {
@@ -269,10 +296,11 @@ export class Dragon implements Boss, BabyOwner {
     this.relax();
     this.idleT = 0.8;
     this.orbitDir = Math.sign(this.p.x * -this.p.z) || 1;
-    this.cx = this.p.x * 0.2;
-    this.cz = this.p.z * 0.2;
+    this.cx = this.skyIntro ? 0 : this.p.x * 0.2;
+    this.cz = this.skyIntro ? 0 : this.p.z * 0.2;
     this.host.sfx.drone(true, 0);
     this.spawnBabies();
+    this.skyIntro = false;
   }
 
   /* ───────────────────────── 아기 용 (1페이즈) ───────────────────────── */
@@ -529,7 +557,7 @@ export class Dragon implements Boss, BabyOwner {
     const ph = this.phaseIndex;
     const C = D.cruise;
     const pl = this.player.pos;
-    const bm = this.babyState === 'fight';
+    const bm = this.babyState === 'fight' || this.skyIntro;
     const R = bm ? D.baby.sky.radius : this.cruiseOverride?.radius ?? C.radius[ph];
     const alt = bm ? D.baby.sky.alt : this.cruiseOverride?.alt ?? C.alt[ph];
     const turn = bm ? 0.45 : C.turn[ph];

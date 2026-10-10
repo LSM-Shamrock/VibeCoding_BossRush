@@ -4,6 +4,7 @@ import { WORLD } from '../../world';
 import { BLOCKED, type Circle, type Host, type Sphere, type Target } from '../../types';
 import type { Player } from '../../player';
 import type { FireField } from './fire';
+import { DragonRig } from './rig';
 
 const V3 = THREE.Vector3;
 type V3 = THREE.Vector3;
@@ -29,57 +30,12 @@ export interface BabyOwner {
 
 type St = 'drop' | 'prowl' | 'bite' | 'spit' | 'swoop' | 'daze' | 'dying';
 
-const NSEG = 11;
-const SP = 0.7;
-const RADII = [0.5, 0.62, 0.68, 0.64, 0.58, 0.5, 0.42, 0.34, 0.26, 0.19, 0.11];
-
-/** 두 아기 용이 같은 재질을 쓰되 피격 번쩍임은 따로 하도록 재질을 복제해 쓴다 */
-function makeMats() {
-  const skin = new THREE.MeshStandardMaterial({ color: 0x8a2a1a, emissive: 0x2a0804, roughness: 0.72, metalness: 0.1, flatShading: true });
-  const belly = new THREE.MeshStandardMaterial({ color: 0xd68a3a, emissive: 0x3a1804, roughness: 0.8, flatShading: true });
-  const bone = new THREE.MeshStandardMaterial({ color: 0xe6d4aa, emissive: 0x2a2010, roughness: 0.6, flatShading: true });
-  const wing = new THREE.MeshStandardMaterial({ color: 0xb23a1e, emissive: 0x4a1006, roughness: 0.8, flatShading: true, side: THREE.DoubleSide, transparent: true, opacity: 0.94 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x2a0e0a, roughness: 0.9, flatShading: true, side: THREE.DoubleSide });
-  const gem = new THREE.MeshBasicMaterial({ color: 0xffe040, toneMapped: false });
-  gem.color.multiplyScalar(2.4);
-  const eye = new THREE.MeshBasicMaterial({ color: 0xffc040, toneMapped: false });
-  eye.color.multiplyScalar(2);
-  const glow = new THREE.MeshBasicMaterial({ color: 0xff8a2a, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
-  glow.color.multiplyScalar(1.6);
-  return { skin, belly, bone, wing, dark, gem, eye, glow };
-}
-
-function wingGeo() {
-  // 날개막 (오른쪽 날개, +x 가 바깥). 왼쪽은 x 를 뒤집어 쓴다
-  const P = [
-    [0, 0, 0.3],
-    [1.3, 0.12, 0.55],
-    [2.9, 0.25, 0.0],
-    [2.05, 0.0, -1.0],
-    [1.0, 0.0, -1.1],
-    [0, 0, -0.75],
-  ];
-  const pos: number[] = [];
-  const tri = (a: number, b: number, c: number) => pos.push(...P[a], ...P[b], ...P[c]);
-  tri(0, 1, 2);
-  tri(0, 2, 3);
-  tri(0, 3, 4);
-  tri(0, 4, 5);
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.computeVertexNormals();
-  return g;
-}
-
-function bar(len: number, r0: number, r1: number, mat: THREE.Material) {
-  // +x 로 뻗는 가는 뼈대
-  const g = new THREE.CylinderGeometry(r1, r0, len, 5).rotateZ(-Math.PI / 2).translate(len / 2, 0, 0);
-  return new THREE.Mesh(g, mat);
-}
+/** 본체와 같은 모델을 줄여 쓴다 (몸 길이 200 → 200×S, 굵기 · 날개도 같은 비율) */
+const S = B.scale;
 
 /**
- * 아기 용 — 본체 용보다 훨씬 작고 짧은 새끼. 낮게 날고 주로 땅에서 싸운다.
- *  · 머리가 지나간 길을 짧은 몸통(11마디)이 따라온다. 이마의 노란 보석이 약점.
+ * 아기 용 — 본체 용과 같은 모델(DragonRig)을 크기와 몸 길이만 줄인 새끼. 낮게 날고 주로 땅에서 싸운다.
+ *  · 이마와 가슴의 노란 보석이 약점.
  *  · 공격: 돌진(bite, 닿으면 바로 피해) / 불덩이 뱉기(spit) / 날아올라 내리꽂기(swoop). 돌진 · 내리꽂기 뒤에는 어지러워 머리가 크게 드러난다.
  *  · 맞은 피해는 그대로 본체 용 체력에서 깎인다 (둘이 합쳐 1페이즈 체력).
  */
@@ -103,7 +59,7 @@ export class BabyDragon implements Target {
   private orbitDir = Math.random() < 0.5 ? 1 : -1;
   private orbitT = 3;
   private vy = 0;
-  private hy = 1.35;
+  private hy = 1.1;
   private jaw = 0.1;
   private fireK = 0;
   private flap = { hz: 0.5, amp: 0.3, fold: 0.85, phase: Math.random() * TAU };
@@ -122,22 +78,13 @@ export class BabyDragon implements Target {
   private lookYaw = 0;
   private gone = false;
 
-  private trail: V3[] = [];
-  private root = new THREE.Group();
-  private head = new THREE.Group();
-  private jawMesh!: THREE.Mesh;
-  private mouth!: THREE.Mesh;
-  private segs: THREE.Mesh[] = [];
-  private wings: { piv: THREE.Group; sign: number }[] = [];
-  private legs: { g: THREE.Group; seg: number; side: number; ph: number }[] = [];
-  private mats = makeMats();
-  private geos: THREE.BufferGeometry[] = [];
+  private rig: DragonRig;
+  private bank = 0;
+  private yawRate = 0;
   private tmp = new V3();
   private tmp2 = new V3();
   private tmp3 = new V3();
-  private q = new THREE.Quaternion();
   private spheres: Sphere[] = [];
-  private segPos: V3[] = [];
 
   constructor(
     private owner: BabyOwner,
@@ -154,12 +101,12 @@ export class BabyDragon implements Target {
     this.seq = index === 0 ? ['spit', 'bite', 'swoop', 'bite', 'spit', 'swoop'] : ['bite', 'swoop', 'spit', 'swoop', 'bite', 'spit'];
     this.seqI = 0;
     this.attackT = 1.2 + index * 1.7;
-    this.build();
-    const f = this.fwd(this.tmp);
-    for (let k = 0; k < 90; k++) this.trail.push(new V3(x - f.x * 0.2 * k, 70, z - f.z * 0.2 * k));
-    for (let i = 0; i < NSEG + 2; i++) this.segPos.push(new V3());
-    for (let i = 0; i < 8; i++) this.spheres.push({ x: 0, y: 0, z: 0, r: 1 });
-    this.owner.host.scene.add(this.root);
+    this.rig = new DragonRig(owner.host.scene, { light: false });
+    this.rig.group.scale.setScalar(S);
+    this.rig.wing.hz = 1;
+    this.rig.layoutLine(x / S, 70 / S, z / S, this.yaw, 0);
+    this.rig.setRage(0);
+    for (let i = 0; i < this.rig.parts.length; i++) this.spheres.push({ x: 0, y: 0, z: 0, r: 1 });
     // 떨어질 자리 표시
     owner.host.fx.telegraphs.circle(x, z, 3.2, Math.sqrt((70 - this.hy) / 35), () => {});
     this.sync(0);
@@ -175,105 +122,12 @@ export class BabyDragon implements Target {
     return this.tmp3.set(this.pos.x, 0, this.pos.z);
   }
 
-  /* ───────────────────────── 모델 ───────────────────────── */
-  private geo<T extends THREE.BufferGeometry>(g: T): T {
-    this.geos.push(g);
-    return g;
-  }
-  private mesh(g: THREE.BufferGeometry, m: THREE.Material, parent: THREE.Object3D) {
-    const me = new THREE.Mesh(this.geo(g), m);
-    me.castShadow = true;
-    parent.add(me);
-    return me;
-  }
-
-  private build() {
-    const M = this.mats;
-    // 몸통 마디
-    for (let i = 0; i < NSEG; i++) {
-      const r = RADII[i];
-      const s = new THREE.Mesh(this.geo(new THREE.IcosahedronGeometry(1, 0)), i % 3 === 1 ? M.belly : M.skin);
-      s.scale.set(r * 1.05, r * 0.95, SP * 0.78);
-      s.castShadow = true;
-      this.root.add(s);
-      this.segs.push(s);
-      // 등 가시
-      if (i > 0 && i < NSEG - 1) {
-        const sp = this.mesh(new THREE.ConeGeometry(r * 0.28, r * 0.9, 4), M.bone, s);
-        sp.position.set(0, r * 0.95, 0);
-        sp.scale.set(1 / (r * 1.05), 1 / (r * 0.95), 1 / (SP * 0.78));
-        sp.scale.multiplyScalar(0.9);
-      }
-    }
-    // 머리
-    this.root.add(this.head);
-    const skull = this.mesh(new THREE.IcosahedronGeometry(1, 0), M.skin, this.head);
-    skull.scale.set(0.62, 0.5, 0.78);
-    const snout = this.mesh(new THREE.ConeGeometry(0.34, 0.9, 5).rotateX(Math.PI / 2).translate(0, -0.05, 0.75), M.skin, this.head);
-    snout.scale.set(1.15, 0.85, 1);
-    this.jawMesh = this.mesh(new THREE.ConeGeometry(0.3, 0.85, 5).rotateX(Math.PI / 2).translate(0, 0, 0.42), M.belly, this.head);
-    this.jawMesh.position.set(0, -0.26, 0.2);
-    this.mouth = this.mesh(new THREE.SphereGeometry(0.34, 10, 8), M.glow, this.head);
-    this.mouth.position.set(0, -0.2, 0.95);
-    this.mouth.castShadow = false;
-    this.mouth.visible = false;
-    for (const sd of [-1, 1]) {
-      const horn = this.mesh(new THREE.ConeGeometry(0.15, 1.0, 5).rotateX(-Math.PI / 2 - 0.5), M.bone, this.head);
-      horn.position.set(sd * 0.36, 0.34, -0.3);
-      horn.rotation.z = sd * -0.3;
-      const eye = this.mesh(new THREE.SphereGeometry(0.11, 8, 6), M.eye, this.head);
-      eye.position.set(sd * 0.33, 0.14, 0.38);
-      eye.castShadow = false;
-      const ear = this.mesh(new THREE.ConeGeometry(0.1, 0.5, 4).rotateX(-Math.PI / 2 - 0.2), M.dark, this.head);
-      ear.position.set(sd * 0.5, 0.18, -0.28);
-      ear.rotation.z = sd * -0.9;
-    }
-    // 이마의 노란 보석 (약점)
-    const gem = this.mesh(new THREE.OctahedronGeometry(1, 0), M.gem, this.head);
-    gem.scale.set(0.15, 0.24, 0.12);
-    gem.position.set(0, 0.46, 0.2);
-    gem.rotation.x = -0.35;
-    gem.castShadow = false;
-    // 날개
-    const wg = this.geo(wingGeo());
-    for (const sign of [1, -1]) {
-      const piv = new THREE.Group();
-      const arm = bar(1.3, 0.09, 0.07, M.dark);
-      const fore = bar(1.7, 0.07, 0.035, M.dark);
-      fore.position.set(1.3, 0.12, 0.55);
-      fore.rotation.z = -0.1;
-      fore.rotation.y = 0.28;
-      const mem = new THREE.Mesh(wg, M.wing);
-      mem.castShadow = true;
-      piv.add(mem, arm, fore);
-      piv.scale.x = sign;
-      this.root.add(piv);
-      this.wings.push({ piv, sign });
-    }
-    // 다리 (앞 · 뒤)
-    for (const [seg, ph] of [[1, 0], [4, Math.PI]] as const) {
-      for (const side of [-1, 1]) {
-        const g = new THREE.Group();
-        const up = this.mesh(new THREE.CylinderGeometry(0.16, 0.12, 0.62, 5).translate(0, -0.31, 0), M.skin, g);
-        const lo = this.mesh(new THREE.CylinderGeometry(0.11, 0.08, 0.6, 5).translate(0, -0.3, 0), M.skin, g);
-        lo.position.y = -0.6;
-        lo.rotation.x = 0.5;
-        const foot = this.mesh(new THREE.ConeGeometry(0.16, 0.34, 4).rotateX(Math.PI / 2).translate(0, 0, 0.12), M.bone, g);
-        foot.position.set(0, -1.1, 0.14);
-        void up;
-        this.root.add(g);
-        this.legs.push({ g, seg, side, ph: ph + (side > 0 ? Math.PI : 0) });
-      }
-    }
-  }
-
   /* ───────────────────────── 보조 ───────────────────────── */
   private fwd(out: THREE.Vector3) {
     return out.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
   }
   private mouthPos(out: THREE.Vector3) {
-    const cp = Math.cos(this.pitch);
-    return out.set(this.pos.x + Math.sin(this.yaw) * cp * 1.25, this.pos.y + Math.sin(this.pitch) * 1.25 - 0.1, this.pos.z + Math.cos(this.yaw) * cp * 1.25);
+    return this.rig.mouth(out);
   }
   private distToPlayer() {
     const p = this.owner.player.pos;
@@ -405,7 +259,7 @@ export class BabyDragon implements Target {
     if (rr > WORLD.radius - 4.5) goal = Math.atan2(-this.pos.x, -this.pos.z);
     this.turn(goal, 4.2, dt);
     this.walk(sp, dt);
-    this.hy = approach(this.hy, 1.35 + Math.sin(this.t * 6) * 0.06, 8, dt);
+    this.hy = approach(this.hy, 1.1 + Math.sin(this.t * 6) * 0.05, 8, dt);
     this.pos.y = this.hy;
     this.pitch = approach(this.pitch, 0, 6, dt);
     this.lookYaw = approach(this.lookYaw, clamp(wrapPi(toP - this.yaw), -1, 1), 6, dt);
@@ -441,7 +295,7 @@ export class BabyDragon implements Target {
     if (this.sub === 0) {
       const toP = this.angToPlayer();
       if (this.t < tell * 0.6) this.turn(toP, 9, dt);
-      this.hy = approach(this.hy, 0.95, 10, dt);
+      this.hy = approach(this.hy, 0.8, 10, dt);
       this.pos.y = this.hy;
       this.pitch = approach(this.pitch, -0.12, 8, dt);
       this.jaw = approach(this.jaw, 0.5, 8, dt);
@@ -478,7 +332,7 @@ export class BabyDragon implements Target {
     this.runLeft -= step;
     this.speed = sp;
     this.gait += dt * 20;
-    this.hy = 1.1;
+    this.hy = 0.9;
     this.pos.y = this.hy;
     this.clampArena();
     this.jaw = 1;
@@ -618,7 +472,7 @@ export class BabyDragon implements Target {
     const e = k * k;
     this.pos.x = this.from.x + (this.goal.x - this.from.x) * e;
     this.pos.z = this.from.z + (this.goal.z - this.from.z) * e;
-    this.pos.y = this.from.y + (1.1 - this.from.y) * e;
+    this.pos.y = this.from.y + (0.9 - this.from.y) * e;
     this.hy = this.pos.y;
     this.yaw = Math.atan2(this.goal.x - this.from.x, this.goal.z - this.from.z);
     this.pitch = -1.0 * Math.min(1, k * 3);
@@ -648,7 +502,7 @@ export class BabyDragon implements Target {
     this.dazeT -= dt;
     this.speed = approach(this.speed, 0, 6, dt);
     this.walk(this.speed * 0.5, dt);
-    this.hy = approach(this.hy, 1.0, 8, dt);
+    this.hy = approach(this.hy, 0.8, 8, dt);
     this.pos.y = this.hy;
     this.pitch = approach(this.pitch, -0.2, 6, dt);
     this.jaw = approach(this.jaw, 0.35, 6, dt);
@@ -670,7 +524,10 @@ export class BabyDragon implements Target {
     if (!this.strike) return;
     const pl = this.owner.player;
     if (pl.dead || this.hitCd > 0) return;
-    for (const s of this.spheres) {
+    const ps = this.rig.parts;
+    for (let i = 0; i < ps.length; i++) {
+      if (ps[i].kind === 'wing') continue;
+      const s = this.spheres[i];
       if (Math.hypot(pl.pos.x - s.x, pl.pos.z - s.z) < s.r + 0.6 && Math.abs(s.y - (0.9 + pl.pos.y)) < s.r + 1.3) {
         if (pl.takeDamage(s.x, s.z)) this.hitCd = 0.25;
         break;
@@ -699,114 +556,75 @@ export class BabyDragon implements Target {
 
   private updateDying(dt: number) {
     const { host } = this.owner;
-    this.hy = approach(this.hy, 0.6, 5, dt);
+    this.hy = approach(this.hy, 0.7, 5, dt);
     this.pos.y = this.hy;
     this.pitch = approach(this.pitch, -0.5, 4, dt);
-    this.yaw += dt * 4;
+    this.yaw += dt * 2.2;
     this.flap.hz = 3;
     this.flap.amp = 0.7;
     this.speed = 0;
     for (let i = 0; i < 2; i++) {
-      const s = this.segPos[Math.floor(Math.random() * NSEG)];
-      host.fx.particles.burst(s, Math.random() < 0.5 ? 0xff5a1a : 0xffc060, 4, 6, 0.8, 0.3, 0.6, 3, 2);
+      this.bodyPt(Math.floor(Math.random() * this.rig.rings), this.tmp2);
+      host.fx.particles.burst(this.tmp2, Math.random() < 0.5 ? 0xff5a1a : 0xffc060, 4, 6, 0.8, 0.3, 0.6, 3, 2);
     }
     if (this.t > 0.9) {
       host.fx.burstLight(this.tmp.set(this.pos.x, 1.2, this.pos.z), 0xffc070, 300, 1.0);
       host.fx.ring(this.pos.x, this.pos.z, 12, 0.7, 0xffd27a);
       host.sfx.explosion(true);
       host.shake(1.4, 0.3);
-      for (let i = 0; i < NSEG; i += 2) {
-        host.fx.particles.burst(this.segPos[i], 0xff4a2a, 10, 10, 1.0, 0.36, 0.8, 4, 2);
-        host.fx.particles.burst(this.segPos[i], 0xffd060, 5, 8, 0.8, 0.28, 0.8, 4, 2);
+      for (let i = 0; i < this.rig.rings; i += 10) {
+        this.bodyPt(i, this.tmp2);
+        host.fx.particles.burst(this.tmp2, 0xff4a2a, 10, 10, 1.0, 0.36, 0.8, 4, 2);
+        host.fx.particles.burst(this.tmp2, 0xffd060, 5, 8, 0.8, 0.28, 0.8, 4, 2);
       }
-      this.root.visible = false;
+      this.rig.explodeHide();
       this.gone = true;
       this.owner.babyDown(this);
     }
   }
 
   /* ───────────────────────── 그리기 ───────────────────────── */
+  /** i 번째 마디의 월드 위치 */
+  private bodyPt(i: number, out: THREE.Vector3) {
+    this.rig.ring(i, out);
+    return out.multiplyScalar(S);
+  }
+
   private sync(dt: number) {
-    const M = this.mats;
-    // 머리
-    this.head.position.copy(this.pos);
-    this.head.rotation.set(-(this.pitch), this.yaw + this.lookYaw * 0.8, 0, 'YXZ');
-    this.jawMesh.rotation.x = this.jaw * 0.55;
-    this.mouth.visible = this.fireK > 0.05;
-    if (this.mouth.visible) this.mouth.scale.setScalar(0.5 + 0.9 * this.fireK + Math.sin(this.t * 40) * 0.05);
-    // 몸통 궤적
-    const tr = this.trail;
-    if (tr.length < 2 || tr[0].distanceToSquared(tr[1]) > 0.04) tr.unshift(this.pos.clone());
-    else tr[0].copy(this.pos);
-    if (tr.length > 90) tr.length = 90;
-    const need = (NSEG + 2) * SP + 1.2;
-    let acc = 0;
-    let ti = 0;
-    for (let k = 0; k < NSEG + 2; k++) {
-      const want = 0.95 + k * SP;
-      while (ti < tr.length - 1) {
-        const sl = tr[ti].distanceTo(tr[ti + 1]);
-        if (acc + sl >= want) break;
-        acc += sl;
-        ti++;
-      }
-      const out = this.segPos[k];
-      if (ti >= tr.length - 1) {
-        out.copy(tr[tr.length - 1]);
-      } else {
-        const sl = tr[ti].distanceTo(tr[ti + 1]) || 1;
-        out.lerpVectors(tr[ti], tr[ti + 1], clamp((want - acc) / sl, 0, 1));
-      }
-    }
-    void need;
-    // 꼬리 물결 + 바닥에 붙기
-    const moving = clamp(this.speed / 8, 0, 1);
-    for (let i = 0; i < NSEG + 2; i++) {
-      const sp = this.segPos[i];
-      const k = i / NSEG;
-      const sway = Math.sin(this.t * (3 + moving * 4) - i * 0.55) * (0.1 + 0.5 * k * k) * (0.35 + 0.65 * moving + (this.state === 'dying' ? 1 : 0));
-      const prev = i === 0 ? this.pos : this.segPos[i - 1];
-      const dx = sp.x - prev.x;
-      const dz = sp.z - prev.z;
-      const l = Math.hypot(dx, dz) || 1;
-      sp.x += (-dz / l) * sway;
-      sp.z += (dx / l) * sway;
-      const r = RADII[Math.min(i, NSEG - 1)];
-      sp.y = Math.max(sp.y, r * 0.75);
-    }
-    for (let i = 0; i < NSEG; i++) {
-      const s = this.segs[i];
-      s.position.copy(this.segPos[i]);
-      const prev = i === 0 ? this.pos : this.segPos[i - 1];
-      this.tmp.copy(prev);
-      if (this.tmp.distanceToSquared(s.position) > 1e-6) s.lookAt(this.tmp);
-      const sph = i < 8 ? this.spheres[i] : null;
-      if (sph) {
-        sph.x = s.position.x;
-        sph.y = s.position.y;
-        sph.z = s.position.z;
-        sph.r = RADII[i] * 1.25;
-      }
-    }
-    // 날개
-    this.flap.phase += dt * this.flap.hz * TAU;
-    const wingBase = this.segPos[1];
-    const fold = this.flap.fold;
-    const stroke = Math.sin(this.flap.phase);
-    for (const w of this.wings) {
-      const ang = (0.55 + stroke * this.flap.amp) * (1 - fold) - 0.15 * fold + 0.1;
-      w.piv.position.set(wingBase.x, wingBase.y + RADII[1] * 0.6, wingBase.z);
-      w.piv.rotation.set(0, 0, 0);
-      // 몸 방향에 맞춰 놓는다 (몸 마디 1 의 방향)
-      w.piv.quaternion.copy(this.segs[1].quaternion);
-      this.q.setFromAxisAngle(this.tmp.set(0, 0, 1), ang * w.sign);
-      w.piv.quaternion.multiply(this.q);
-      this.q.setFromAxisAngle(this.tmp.set(0, 1, 0), (-0.25 + fold * 0.9) * w.sign);
-      w.piv.quaternion.multiply(this.q);
-      w.piv.scale.set(w.sign * (1 - 0.55 * fold), 1 - 0.3 * fold, 1);
+    const r = this.rig;
+    // 선회 기울기
+    const yr = wrapPi(this.yaw - this.lastYaw) / Math.max(dt, 1e-4);
+    this.lastYaw = this.yaw;
+    this.yawRate = approach(this.yawRate, dt > 0 ? yr : 0, 8, dt || 1);
+    this.bank = approach(this.bank, this.pos.y > 3 ? clamp(this.yawRate * 0.5, -0.7, 0.7) : 0, 4, dt || 1);
+    r.head.set(this.pos.x / S, this.pos.y / S, this.pos.z / S);
+    r.yaw = this.yaw;
+    r.pitch = this.pitch;
+    r.bank = this.bank;
+    r.lookYaw = this.lookYaw;
+    r.jaw = this.jaw;
+    r.fire = this.fireK;
+    r.stunned = this.state === 'daze';
+    r.legGait = this.state === 'bite' && this.sub === 1;
+    r.gaitHz = 2.4;
+    r.undulate = 0.5 + 0.4 * clamp(this.speed / 10, 0, 1) + (this.state === 'dying' ? 0.7 : 0);
+    r.wing.hz = this.flap.hz;
+    r.wing.amp = this.flap.amp;
+    r.wing.fold = this.flap.fold;
+    r.wing.raise = 0.1;
+    r.wing.spread = 1;
+    r.update(dt);
+    // 판정 구 (월드)
+    const ps = r.parts;
+    for (let i = 0; i < ps.length; i++) {
+      const s = this.spheres[i];
+      s.x = ps[i].x * S;
+      s.y = ps[i].y * S;
+      s.z = ps[i].z * S;
+      s.r = ps[i].r * S * 1.3;
     }
     // 날갯짓 소리 (공중에 떠 있을 때만)
-    if (this.alive && this.pos.y > 3 && fold < 0.5) {
+    if (this.alive && this.pos.y > 3 && this.flap.fold < 0.5) {
       this.beatT += dt * this.flap.hz;
       if (this.beatT >= 1) {
         this.beatT -= 1;
@@ -814,49 +632,32 @@ export class BabyDragon implements Target {
         this.owner.host.sfx.wingbeat(clamp(0.9 - d / 45, 0.12, 0.6));
       }
     }
-    // 다리
-    for (const l of this.legs) {
-      const sp = this.segPos[l.seg];
-      const s = this.segs[l.seg];
-      this.tmp.set(1, 0, 0).applyQuaternion(s.quaternion);
-      l.g.position.set(sp.x + this.tmp.x * l.side * RADII[l.seg] * 0.8, sp.y - 0.05, sp.z + this.tmp.z * l.side * RADII[l.seg] * 0.8);
-      const air = this.pos.y > 3;
-      const swing = air ? 0.25 : Math.sin(this.gait + l.ph) * 0.65 * (0.15 + 0.85 * moving);
-      l.g.rotation.set(swing, this.yaw, 0, 'YXZ');
-    }
-    // 피격 번쩍임
-    const f = this.flashT > 0 ? 1 : 0;
-    M.skin.emissive.setRGB(0.16 + 0.9 * f, 0.03 + 0.5 * f, 0.02 + 0.3 * f);
-    M.belly.emissive.setRGB(0.22 + 0.7 * f, 0.1 + 0.4 * f, 0.02 + 0.2 * f);
-    M.gem.color.setRGB(2.6, 2.1 + 0.4 * Math.sin(this.t * 6), 0.3);
   }
+  private lastYaw = 0;
 
   flash() {
     this.flashT = 0.08;
+    this.rig.flash(1);
   }
 
   /* ───────────────────────── 판정 (Target) ───────────────────────── */
   hitArrow(p: THREE.Vector3, r: number, dmg: number): number {
     if (!this.alive) return 0;
-    const hs = 1.0;
-    let kind: 'head' | 'body' | null = null;
-    {
-      const dx = p.x - this.pos.x;
-      const dy = p.y - this.pos.y;
-      const dz = p.z - this.pos.z;
-      const rr = hs + r;
-      if (dx * dx + dy * dy + dz * dz < rr * rr) kind = 'head';
-    }
-    if (!kind) {
-      for (const s of this.spheres) {
-        const dx = p.x - s.x;
-        const dy = p.y - s.y;
-        const dz = p.z - s.z;
-        const rr = s.r + r;
-        if (dx * dx + dy * dy + dz * dz < rr * rr) {
-          kind = 'body';
+    let kind: 'head' | 'body' | 'wing' | null = null;
+    const ps = this.rig.parts;
+    for (let i = 0; i < ps.length; i++) {
+      const s = this.spheres[i];
+      const dx = p.x - s.x;
+      const dy = p.y - s.y;
+      const dz = p.z - s.z;
+      const rr = s.r + r;
+      if (dx * dx + dy * dy + dz * dz < rr * rr) {
+        const k = ps[i].kind;
+        if (k === 'head' || k === 'chest') {
+          kind = 'head'; // 이마 · 가슴 보석은 같은 약점
           break;
         }
+        if (!kind) kind = k;
       }
     }
     if (!kind) return 0;
@@ -865,6 +666,7 @@ export class BabyDragon implements Target {
       return BLOCKED;
     }
     if (kind === 'head') return this.owner.babyDamage(this, dmg * (this.dazed ? D.exposedMult : D.headMult), this.dazed ? 'exposed' : 'weak', p);
+    if (kind === 'wing') return this.owner.babyDamage(this, dmg * D.wingMult, 'body', p);
     return this.owner.babyDamage(this, dmg * D.bodyMult, 'body', p);
   }
 
@@ -886,12 +688,10 @@ export class BabyDragon implements Target {
   }
 
   aimSphereList(): readonly Sphere[] {
-    return this.alive ? [{ x: this.pos.x, y: this.pos.y, z: this.pos.z, r: 1.0 }, ...this.spheres] : [];
+    return this.alive ? this.spheres : [];
   }
 
   dispose() {
-    this.owner.host.scene.remove(this.root);
-    for (const g of this.geos) g.dispose();
-    for (const m of Object.values(this.mats)) m.dispose();
+    this.rig.dispose();
   }
 }
