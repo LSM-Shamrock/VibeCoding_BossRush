@@ -555,22 +555,46 @@ export class Dragon implements Boss {
     }
   }
 
-  /** 몸통에 닿은 플레이어: 머리든 몸통이든 플레이어가 닿는 높이로 지나가면 피해 (돌진 · 추락 · 몸통이 끌려오는 구간 포함).
-   *  쓰러져 바닥에 누운 몸은 벽처럼 막기만 하고 피해는 주지 않는다 */
+  /**
+   * 몸통 접촉.
+   *  · 돌진 · 추락(strikeOn)처럼 몸으로 공격하는 동안에는 닿는 순간 바로 피해.
+   *  · 그 밖에는 이무기처럼 몸에 닿은 채 시간이 쌓여야 피해 (이무기의 2배 빠르게). 닿아 있는 동안 화면이 보랏빛으로 짙어진다.
+   */
+  screenTint = 0;
+  private contactT = 0;
   private updateStrike() {
     this.bodyHitCd = Math.max(0, this.bodyHitCd - this.lastDt);
-    if (this.bodyHitCd > 0 || this.player.dead || !this.alive || this.dying > 0 || this.state === 'enter') return;
+    const dt = this.lastDt;
     const pl = this.player.pos;
-    for (const s of this.rig.parts) {
-      if (s.kind === 'wing') continue;
-      // 몸통에 닿는 순간 바로 피해 (바닥에 누워 있어도 마찬가지). 플레이어가 몸통 벽에 막히는 거리보다 약간 넓게 잡아, 막히기 전에 반드시 맞는다
-      const R = s.r * 0.82 + 0.5 + 0.2;
-      if (Math.hypot(pl.x - s.x, pl.z - s.z) < R && Math.abs(s.y - (0.9 + pl.y)) < s.r + 1.2) {
-        // 연속 접촉은 플레이어의 무적 시간(invuln)이 막아 준다
-        if (this.player.takeDamage(s.x, s.z)) this.bodyHitCd = 0.15;
-        return;
+    let touching = false;
+    if (!this.player.dead && this.alive && this.dying <= 0 && this.state !== 'enter') {
+      for (const s of this.rig.parts) {
+        if (s.kind === 'wing') continue;
+        if (this.strikeOn) {
+          // 몸으로 치는 중: 닿는 순간 바로 피해
+          const R = s.r * 0.82 + 0.5 + 0.2;
+          if (this.bodyHitCd <= 0 && Math.hypot(pl.x - s.x, pl.z - s.z) < R && Math.abs(s.y - (0.9 + pl.y)) < s.r + 1.2) {
+            if (this.player.takeDamage(s.x, s.z)) this.bodyHitCd = 0.15;
+            break;
+          }
+        } else if (s.r >= 1.35) {
+          const R = s.r * 0.82 + 0.5 + 0.2;
+          if (Math.hypot(pl.x - s.x, pl.z - s.z) < R && Math.abs(s.y - (0.9 + pl.y)) < s.r + 1.2) {
+            touching = true;
+            break;
+          }
+        }
       }
     }
+    if (touching) this.contactT += dt;
+    else this.contactT = Math.max(0, this.contactT - dt * 1.5);
+    const H = D.contact.hurtAfter;
+    if (this.contactT >= H && this.screenTint >= 0.97) {
+      this.contactT = 0;
+      this.player.takeDamage(pl.x + (Math.random() - 0.5), pl.z + 1);
+    }
+    const goal = touching ? Math.min(1, this.contactT / H) : 0;
+    this.screenTint += (goal - this.screenTint) * (1 - Math.exp(-(goal > this.screenTint ? 16 : 3) * dt));
   }
 
   /** 불씨 · 먼지 · 날갯짓 바람 */
@@ -763,8 +787,8 @@ export class Dragon implements Boss {
       const dz = p.z - s.z;
       const rr = s.r + r;
       if (dx * dx + dy * dy + dz * dz < rr * rr) {
-        if (s.kind === 'head') {
-          kind = 'head';
+        if (s.kind === 'head' || s.kind === 'chest') {
+          kind = 'head'; // 이마 · 가슴 보석 구간은 같은 약점
           break;
         }
         if (!kind) kind = s.kind;

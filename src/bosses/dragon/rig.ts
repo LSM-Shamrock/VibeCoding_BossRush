@@ -257,7 +257,7 @@ function stdMat(color: number, emissive = 0x000000, rough = 0.55, metal = 0.25, 
 }
 
 export interface DragonPart extends Sphere {
-  kind: 'head' | 'body' | 'wing';
+  kind: 'head' | 'chest' | 'body' | 'wing';
 }
 
 /** 날개 제어값 (보스 로직이 목표값을 정하면 리그가 부드럽게 따라간다) */
@@ -358,6 +358,9 @@ export class DragonRig {
   /** true 면 몸을 수직으로 세운다(목 · 몸통 수직, 꼬리는 회오리로 말림, 팔다리는 아래로 늘어짐) */
   upright = false;
   private curUp = 0;
+  /** true 면 날개를 몸 뒤에서 앞으로 크게 휘두른다 (폭풍 날갯짓) */
+  wingSwing = false;
+  private curSwing = 0;
   private T: V3[] = [];
   private U: V3[] = [];
   private Rv: V3[] = [];
@@ -485,6 +488,7 @@ export class DragonRig {
 
     /* ── 머리 ── */
     this.buildHead(horn, dark);
+    this.buildGems(dark);
     this.headSphere = { x: 0, y: 0, z: 0, r: 4.0, kind: 'head' };
     this.mouthLight = new THREE.PointLight(0xff7a28, 0, 46, 1.4);
     this.headRoot.add(this.mouthLight);
@@ -515,12 +519,41 @@ export class DragonRig {
 
     /* 판정 구 */
     this.parts.push(this.headSphere);
-    for (let i = 2; i < NR; i += 2) this.parts.push({ x: 0, y: 0, z: 0, r: RAD[i] + 0.4, kind: 'body' });
+    // 가슴(날개 ~ 앞다리 사이)은 노란 보석이 박힌 약점: 이 구간을 맞혀도 머리와 같은 약점 피해
+    for (let i = 2; i < NR; i += 2) this.parts.push({ x: 0, y: 0, z: 0, r: RAD[i] + 0.4, kind: i >= IW - 4 && i <= IFL + 2 ? 'chest' : 'body' });
     for (let k = 0; k < 8; k++) this.parts.push({ x: 0, y: 0, z: 0, r: 2, kind: 'wing' });
     this.layoutLine(0, 20, 0, 0, 1);
   }
 
   /* ───────────────────────── 모델링 ───────────────────────── */
+  /** 약점 보석: 이마와 가슴(배 쪽)에 박힌 노란 보석 */
+  private gemMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6, 2.0, 0.3), toneMapped: false });
+  private chestGem!: THREE.Group;
+  private buildGems(dark: THREE.Material) {
+    const geo = new THREE.OctahedronGeometry(1, 0);
+    this.disposables.push(geo, this.gemMat);
+    const mk = (parent: THREE.Object3D, sx: number, sy: number, sz: number, bezel: number) => {
+      const g = new THREE.Group();
+      const bz = new THREE.Mesh(geo, dark);
+      bz.scale.set(sx * bezel, sy * bezel, sz * bezel * 0.8);
+      bz.position.z = -sz * 0.18;
+      const gm = new THREE.Mesh(geo, this.gemMat);
+      gm.scale.set(sx, sy, sz);
+      g.add(bz, gm);
+      g.traverse((o) => {
+        o.frustumCulled = false;
+      });
+      parent.add(g);
+      return g;
+    };
+    // 이마 (머리 로컬: +z 앞, +y 위)
+    const f = mk(this.headRoot, 0.3, 0.46, 0.2, 1.35);
+    f.position.set(0, 1.02, 0.55);
+    f.rotation.x = -0.35;
+    // 가슴
+    this.chestGem = mk(this.group, 1.7, 2.8, 1.1, 1.3);
+  }
+
   private buildHead(horn: THREE.Material, dark: THREE.Material) {
     const r = this.headRoot;
     r.scale.setScalar(HS);
@@ -984,6 +1017,7 @@ export class DragonRig {
     W.fold = approach(W.fold, g.fold, 5, dt);
     W.raise = approach(W.raise, g.raise, 6, dt);
     W.spread = approach(W.spread, g.spread, 4, dt);
+    this.curSwing = approach(this.curSwing, this.wingSwing ? 1 : 0, 6, dt);
     this.curJaw = approach(this.curJaw, this.jaw, 9, dt);
     this.curFire = approach(this.curFire, this.fire, 6, dt);
     this.curUnd = approach(this.curUnd, this.undulate, 2, dt);
@@ -1185,6 +1219,16 @@ export class DragonRig {
     this.tailBlade.matrixAutoUpdate = false;
     this.tailBlade.matrix.copy(this.m4);
     this.tailBlade.matrixWorldNeedsUpdate = true;
+
+    // 가슴 보석: 배 쪽(등의 반대편) 표면에 박힌다
+    const gi = IFL - 7;
+    const gc = this.Pout[gi];
+    this.tv.copy(this.U[gi]).multiplyScalar(-1);
+    this.tv2.crossVectors(this.Rv[gi], this.T[gi]);
+    if (this.tv2.dot(this.tv) < 0) this.tv2.negate(); // 보석의 바깥쪽 법선이 배 쪽을 향하게
+    this.m4.makeBasis(this.Rv[gi], this.T[gi], this.tv2);
+    this.chestGem.position.set(gc.x + this.tv.x * RAD[gi] * 0.97, gc.y + this.tv.y * RAD[gi] * 0.97, gc.z + this.tv.z * RAD[gi] * 0.97);
+    this.chestGem.quaternion.setFromRotationMatrix(this.m4);
   }
 
   private updateHead(dt: number) {
@@ -1324,10 +1368,12 @@ export class DragonRig {
       const side = w.side;
       const bias = 0.12 + W.raise - stun * 0.9;
       const amp = W.amp * (1 - stun);
-      const eA = bias + amp * f0;
-      const eB = bias * 0.9 + amp * this.stroke(ph - 0.07) * 1.08;
-      const sweepA = lerp(0.95, 1.38, fold);
-      const sweepB = lerp(-0.18, 1.45, fold);
+      // 휘두르기: 날개를 옆으로 활짝 펴고 몸 뒤(+)에서 앞(−)으로 크게 쓸어 넘긴다
+      const sw = this.curSwing;
+      const eA = lerp(bias + amp * f0, -0.3 + 1.25 * f0, sw);
+      const eB = lerp(bias * 0.9 + amp * this.stroke(ph - 0.07) * 1.08, -0.3 + 1.25 * this.stroke(ph - 0.07) * 1.08, sw);
+      const sweepA = lerp(lerp(0.95, 1.38, fold), 0.25, sw);
+      const sweepB = lerp(lerp(-0.18, 1.45, fold), 0.0, sw);
       const S = this.pv.set(c0.x + R.x * side * rad * 0.55 + U.x * rad * 0.7, c0.y + R.y * side * rad * 0.55 + U.y * rad * 0.7, c0.z + R.z * side * rad * 0.55 + U.z * rad * 0.7).clone();
       const d1 = dir(side, sweepA, eA, this.tv);
       const E = S.clone().addScaledVector(d1, ARM[0] * WS * lenK);
@@ -1340,8 +1386,8 @@ export class DragonRig {
       // 손가락뼈: 시간차를 두고 꺾인다 (끝이 늦게 따라온다). 올릴 때는 손가락을 모은다
       const spreadK = lerp(0.55, 1, W.spread) * (1 - fold) * (1 - 0.3 * upW * ampK);
       for (let k = 0; k < 4; k++) {
-        const sweepF = lerp(0.12 + k * 0.4 * spreadK + 0.1 * (1 - spreadK), 1.5, fold);
-        const elevF = bias * 0.8 + amp * this.stroke(ph - 0.15 - 0.05 * k) * (1.05 + 0.1 * k) - 0.04 * k;
+        const sweepF = lerp(lerp(0.12 + k * 0.4 * spreadK + 0.1 * (1 - spreadK), 1.5, fold), 0.02 + k * 0.28, sw);
+        const elevF = lerp(bias * 0.8 + amp * this.stroke(ph - 0.15 - 0.05 * k) * (1.05 + 0.1 * k) - 0.04 * k, -0.3 + 1.25 * this.stroke(ph - 0.15 - 0.05 * k) * (1.05 + 0.1 * k), sw);
         const d = dir(side, sweepF, elevF, this.tv);
         p[3 + k].copy(Wr).addScaledVector(d, FING[k] * WS * lenK);
         // 중간 관절: 날개가 공기를 받는 쪽으로 살짝 휜다
@@ -1499,6 +1545,8 @@ export class DragonRig {
     this.bodyMat.emissive.setRGB(1, 0.35 + 0.2 * hurt - 0.1 * rg, 0.08 + 0.2 * hurt);
     this.memMat.emissiveIntensity = 0.1 + 0.2 * rg * (0.7 + 0.5 * beat) + hurt * 0.5;
     this.eyeMat.color.setRGB(2.2, 1.7 - 0.62 * rg, 0.4 - 0.2 * rg).multiplyScalar(1 + this.curFire * 0.3);
+    // 약점 보석은 숨 쉬듯 일렁인다 (맞으면 번쩍)
+    this.gemMat.color.setRGB(2.6, 2.0, 0.3).multiplyScalar(0.85 + 0.25 * Math.sin(t * 3.2) + hurt * 0.8);
   }
 
   explodeHide() {

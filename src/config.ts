@@ -51,7 +51,7 @@ export const CFG = {
     damageCurve: 1.5, // 클수록 많이 모은 쪽에 위력이 몰린다 (1 = 비례). 2.5 → 1.5: 덜 모은 불꽃과 완전 차징의 차이를 줄임 (위력 = 최소 + (최대-최소) × 차징^곡선)
     speed: [22, 44],
     radius: [0.2, 0.5],
-    life: 9, // 하늘 높이 떠 있는 용까지 닿을 만큼 오래 난다
+    life: 1.3,
     pool: 40,
   },
 
@@ -213,7 +213,8 @@ export const CFG = {
     floorLabel: '3층 · 불타는 하늘 신전',
     maxHp: 1250, // 이무기(1200)보다 살짝만 높게
     phaseAt: [0.75, 0.42], // 1페이즈 체력 25% (이전 33% 의 0.75배) · 3페이즈 체력 42%
-    headMult: 1.5, // 머리 피해 배율
+    headMult: 1.5, // 머리 · 가슴 보석(약점) 피해 배율
+    contact: { hurtAfter: 0.85 }, // 몸에 닿은 채 이 시간(초)이 지나면 체력 1 (이무기 1.7초의 절반). 돌진 · 추락 중에는 닿는 순간 바로 피해
     bodyMult: 0.7, // 몸통
     wingMult: 0.5, // 날개
     exposedMult: 3, // 추락해 쓰러진 동안 머리 피해 배율
@@ -223,9 +224,9 @@ export const CFG = {
     idle: [1.7, 1.2, 0.85],
 
     sequence: [
-      ['spit', 'strafe', 'wind', 'swoop', 'orbit', 'spit', 'strafe', 'swoop'],
-      ['meteor', 'strafe', 'wind', 'crash', 'orbit', 'spit', 'swoop', 'meteor', 'scythe', 'strafe', 'crash'],
-      ['sunray', 'orbit', 'gale', 'wind', 'strafe', 'scythe', 'crash', 'meteor', 'sunray', 'swoop', 'gale', 'scythe', 'wind', 'crash'],
+      ['spit', 'strafe', 'wind', 'land', 'swoop', 'orbit', 'spit', 'strafe', 'land', 'swoop'],
+      ['meteor', 'strafe', 'wind', 'crash', 'orbit', 'spit', 'land', 'swoop', 'meteor', 'scythe', 'strafe', 'crash', 'land'],
+      ['sunray', 'orbit', 'gale', 'wind', 'strafe', 'scythe', 'crash', 'meteor', 'sunray', 'swoop', 'land', 'gale', 'scythe', 'wind', 'crash', 'land'],
     ],
 
     // 화염탄: 입에 불을 모았다가 불덩이를 연달아 던진다. 착지 고리가 차오른다. (페이즈 2~: 바닥에 불이 남는다)
@@ -243,9 +244,11 @@ export const CFG = {
     // 날개 충격파 (페이즈 3): 제단 위에서 날개를 내리칠 때마다 땅을 훑는 불꽃 고리가 퍼진다
     gale: { beats: 4, gap: 1.35, tell: 0.85, speed: 14, width: 1.5, radius: 3.8 },
     // 폭풍 날갯짓: 아레나 밖 하늘에서 몸을 세우고 날개를 크게 휘저어, 내리칠 때마다 굴러오는 회오리를 쏟는다
-    wind: { flaps: [3, 4, 5], count: [1, 2, 3], fan: 0.34, hz: 0.7, amp: 1.25, release: 0.5, dist: 46, alt: 92, speed: [14, 16, 18], radius: 2.8, pull: 6.5, reach: 62 },
+    wind: { flaps: [3, 4, 5], count: [1, 2, 3], fan: 0.34, hz: 0.55, fall: 1.1, dist: 46, alt: 92, speed: [14, 16, 18], radius: 2.8, pull: 6.5, reach: 62 },
     // 선회 사격: 이무기처럼 아레나 가장자리를 낮게 돌며 불덩이를 던진다
     orbit: { revs: [1.1, 1.4, 1.7], speed: [27, 31, 35], radius: 27, alt: 8, interval: [0.8, 0.62, 0.48], flight: 1.0, peak: 6, bomb: 2.6, zone: [0, 3, 4] },
+    // 착지: 플레이어 반대편 땅에 내려앉아 엎드린다 (머리 · 가슴 보석 피해 증가) — 불꽃이 하늘의 용에 닿지 않으므로 주 공격 기회
+    land: { stay: [6.0, 5.2, 4.6], descend: 2.3, far: 15 },
     // 회전 광선: 하늘에서 쏟아지는 광선이 제단 위를 구불구불 쓸고 다닌다. 지나간 자리는 불탄다
     scythe: { dur: [4.2, 4.6, 5.0], omega: 0.85, radius: 2.3, charge: 1.6 },
     roar: 3.0, // 페이즈 전환 포효 (이 동안 무적)
