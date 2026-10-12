@@ -259,8 +259,10 @@ class Game implements Host {
     this.sfx.unlock();
     if (this.paused) {
       this.setPaused(false);
-    } else if ((this.state === 'over' && this.overShown) || this.state === 'clear') {
-      this.showSelect(false); // 쓰러졌거나 클리어했으면 보스 선택 화면으로
+    } else if (this.state === 'over' && this.overShown) {
+      this.startFight(false); // 키보드(재도전 키/Enter) → 같은 보스 재도전. 보스 선택은 버튼으로
+    } else if (this.state === 'clear') {
+      this.showSelect(false); // 클리어했으면 보스 선택 화면으로
     }
     // 보스 선택 화면은 '시작' 버튼(또는 Enter)으로만 시작한다
   }
@@ -469,9 +471,20 @@ class Game implements Host {
     this.hud.showOverlay(
       '등불이 꺼졌다',
       `${this.boss?.title ?? ''}의 남은 체력 <b>${left}%</b><br>
-       <span style="color:#a8957c">보스 선택 화면으로 돌아갑니다.</span><br>
-       <div class="go">${this.binds.label('retry')} 키 또는 클릭으로 보스 선택</div>`,
+       <div class="ovbtns">
+         <button type="button" class="startbtn retrybtn">재도전</button>
+         <button type="button" class="startbtn selbtn">보스 선택</button>
+       </div>
+       <div class="go">${this.binds.label('retry')} 키 · Enter 로 재도전</div>`,
     );
+    document.querySelector<HTMLButtonElement>('#ovbody .retrybtn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.startFight(false);
+    });
+    document.querySelector<HTMLButtonElement>('#ovbody .selbtn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.showSelect(false);
+    });
   }
 
   private showClear() {
