@@ -376,7 +376,7 @@ class Game implements Host {
       const done = f <= this.clearedFloor();
       const status = !ok ? '🔒 이전 보스를 쓰러뜨려야 열립니다' : Number.isFinite(best) ? `최고 기록 ${fmtTime(best)}` : done ? '격파 완료' : '미도전';
       return `<button type="button" class="bcard${ok ? '' : ' locked'}${f === this.pick ? ' sel' : ''}" data-f="${f}" ${ok ? '' : 'aria-disabled="true"'}>
-        <small class="fl">${info.label}</small>
+        <small class="fl">${ok ? info.label : info.label.split(' · ')[0]}</small>
         <b class="nm">${ok ? info.name : '? ? ?'}</b>
         <span class="st">${status}</span>
       </button>`;
