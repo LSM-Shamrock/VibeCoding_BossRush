@@ -65,7 +65,7 @@ export class SettingsPanel {
     body.className = 'kp-body';
     const grid = document.createElement('div');
     grid.className = 'kp-grid st-grid';
-    const row = (label: string, kind: 'sfx' | 'bgm') => {
+    const row = (label: string, kind: 'master' | 'sfx' | 'bgm') => {
       const l = document.createElement('div');
       l.className = 'kp-label';
       l.textContent = label;
@@ -90,6 +90,7 @@ export class SettingsPanel {
       if (kind === 'sfx') slider.addEventListener('change', () => { this.sfx.unlock(); this.sfx.ready(); });
       grid.append(l, slider, val);
     };
+    row('마스터 볼륨', 'master');
     row('효과음', 'sfx');
     row('배경 음악', 'bgm');
     body.append(grid);

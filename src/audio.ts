@@ -4,24 +4,29 @@ const MASTER = 0.8;
 export class Sfx {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
-  /** 효과음 · 배경 음악 각각의 음량 조절 버스 (설정 창의 사운드 탭) */
+  /** 마스터 및 효과음 · 배경 음악 음량 (설정 창의 사운드 탭) */
   private sfxBus!: GainNode;
   private bgmBus!: GainNode;
-  vol = { sfx: 1, bgm: 1 };
+  vol = { master: 1, sfx: 1, bgm: 1 };
   private static readonly VOL_KEY = 'deepnest.volume';
   constructor() {
     try {
       const o = JSON.parse(localStorage.getItem(Sfx.VOL_KEY) ?? 'null');
+      if (o && typeof o.master === 'number') this.vol.master = Math.min(1, Math.max(0, o.master));
       if (o && typeof o.sfx === 'number') this.vol.sfx = Math.min(1, Math.max(0, o.sfx));
       if (o && typeof o.bgm === 'number') this.vol.bgm = Math.min(1, Math.max(0, o.bgm));
     } catch {
       /* 저장값이 없거나 못 읽으면 기본값 */
     }
   }
-  setVolume(kind: 'sfx' | 'bgm', v: number) {
+  setVolume(kind: 'master' | 'sfx' | 'bgm', v: number) {
     this.vol[kind] = Math.min(1, Math.max(0, v));
-    const bus = kind === 'sfx' ? this.sfxBus : this.bgmBus;
-    if (bus) bus.gain.value = this.vol[kind];
+    if (kind === 'master') {
+      if (this.master) this.master.gain.value = this.muted ? 0 : MASTER * this.vol.master;
+    } else {
+      const bus = kind === 'sfx' ? this.sfxBus : this.bgmBus;
+      if (bus) bus.gain.value = this.vol[kind];
+    }
     try {
       localStorage.setItem(Sfx.VOL_KEY, JSON.stringify(this.vol));
     } catch {
@@ -38,7 +43,7 @@ export class Sfx {
         const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
         this.ctx = new AC();
         this.master = this.ctx.createGain();
-        this.master.gain.value = this.muted ? 0 : MASTER;
+        this.master.gain.value = this.muted ? 0 : MASTER * this.vol.master;
         this.master.connect(this.ctx.destination);
         this.sfxBus = this.ctx.createGain();
         this.sfxBus.gain.value = this.vol.sfx;
@@ -59,7 +64,7 @@ export class Sfx {
 
   setMuted(m: boolean) {
     this.muted = m;
-    if (this.master) this.master.gain.value = m ? 0 : MASTER;
+    if (this.master) this.master.gain.value = m ? 0 : MASTER * this.vol.master;
   }
 
   private tone(f0: number, f1: number, dur: number, type: OscillatorType, vol: number, delay = 0) {
