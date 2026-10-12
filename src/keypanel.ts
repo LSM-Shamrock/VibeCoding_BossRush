@@ -142,7 +142,8 @@ export class KeyPanel {
   };
 
   private setMsg(text: string, kind: 'ok' | 'err' | 'hint' | '') {
-    this.msgEl.textContent = text || '칸을 클릭해 키 변경';
+    this.msgEl.textContent = text;
+    this.msgEl.hidden = !text;
     this.msgEl.className = `kp-msg ${text ? kind : 'idle'}`;
   }
 

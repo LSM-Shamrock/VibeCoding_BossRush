@@ -45,12 +45,14 @@ export class SettingsPanel {
     };
     mk('keys', '조작 키');
     mk('sound', '사운드');
-    this.body.replaceChildren();
+    const sound = this.soundPane();
+    this.keys.el.classList.toggle('active', this.tab === 'keys');
+    this.keys.el.setAttribute('aria-hidden', String(this.tab !== 'keys'));
+    sound.classList.toggle('active', this.tab === 'sound');
+    sound.setAttribute('aria-hidden', String(this.tab !== 'sound'));
+    this.body.replaceChildren(this.keys.el, sound);
     if (this.tab === 'keys') {
       this.keys.open();
-      this.body.append(this.keys.el);
-    } else {
-      this.body.append(this.soundPane());
     }
   }
 
@@ -58,7 +60,7 @@ export class SettingsPanel {
     // 조작 키 탭과 같은 틀: 머리글 한 줄 + 한 줄짜리 행들
     const pane = document.createElement('div');
     pane.className = 'keypanel st-sound';
-    pane.innerHTML = '<div class="kp-top"><div class="kp-head"><span>사운드</span><span class="kp-msg idle">슬라이더로 음량 조절</span></div></div>';
+    pane.innerHTML = '<div class="kp-top"><div class="kp-head"><span>사운드</span></div></div>';
     const body = document.createElement('div');
     body.className = 'kp-body';
     const grid = document.createElement('div');
