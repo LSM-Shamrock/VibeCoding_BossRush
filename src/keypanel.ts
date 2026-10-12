@@ -55,6 +55,9 @@ export class KeyPanel {
   }
 
   /** 일시정지 화면이 열릴 때 */
+  get listening() {
+    return !!this.listen;
+  }
   open() {
     this.cancel(true);
     this.setMsg('', '');

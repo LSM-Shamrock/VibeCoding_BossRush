@@ -67,7 +67,7 @@
 
       /* 좌하단: 등불(체력) / 대시 / 특수 */
       #bl { position: absolute; right: 22px; bottom: 22px; background: var(--panel); border: 1px solid var(--edge); border-radius: 6px; padding: 12px 14px 10px; width: max-content; backdrop-filter: blur(3px); box-shadow: inset 0 0 0 3px rgba(10,3,1,.35); }
-      #lamps { display: flex; gap: 8px; margin-bottom: 8px; }
+      #lamps { display: flex; gap: 8px; margin-bottom: 8px; width: 182px; justify-content: center; } /* 5칸 기준 고정 폭 — 칸이 줄어도 박스 크기는 그대로, 남은 칸은 가운데 정렬 */
       /* 체력(불꽃): 켜진 칸은 일렁이며 타오르고, 꺼진 칸은 점선 윤곽만 남은 빈 불꽃 */
       .lamp { position: relative; width: 30px; height: 38px; }
       .lamp svg { display: block; width: 100%; height: 100%; overflow: visible; transform-origin: 50% 100%; filter: drop-shadow(0 0 6px rgba(255,140,40,.8)); }
@@ -187,7 +187,7 @@
       @keyframes bshake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
       #ovbody .ovbtns { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-top: 8px; }
       #ovbody .ovbtns .startbtn { width: 240px; padding-left: 0; padding-right: 0; }
-      #ovbody .minibtns { margin-top: 18px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+      #ovbody .minibtns { position: fixed; left: 22px; bottom: 22px; display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
       #ovbody .minibtn { font: inherit; font-size: 13px; cursor: pointer; padding: 6px 14px; border: 1px solid rgba(255,205,130,.3); border-radius: 6px; background: rgba(20,8,3,.6); color: #b8a68a; transition: border-color .1s, color .1s; }
       #ovbody .minibtn:hover { border-color: rgba(255,205,130,.8); color: #ffe9b8; }
       #ovbody .minibtn.armed { border-color: #ff6a5a; color: #ffd9d2; background: rgba(110,12,12,.6); }

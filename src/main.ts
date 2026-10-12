@@ -285,11 +285,15 @@ class Game implements Host {
   private selFirst = true;
   private settingsOpen = false;
 
-  /** 클리어 진행 + 최고 기록을 모두 지운다 */
+  /** 이 게임이 브라우저에 저장한 데이터(클리어 · 기록 · 난이도 · 키 설정)를 모두 지운다 */
   private resetProgress() {
     try {
-      localStorage.removeItem(Game.CLEAR_KEY);
-      for (let f = 1; f <= FLOORS; f++) localStorage.removeItem(bestKey(f));
+      const del: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('deepnest.')) del.push(k);
+      }
+      for (const k of del) localStorage.removeItem(k);
     } catch {
       /* ignore */
     }
@@ -376,13 +380,13 @@ class Game implements Host {
     }).join('');
     this.hud.showOverlay(
       first ? 'DEEP NEST' : '보스 선택',
-      `${first ? `<span style="color:#a8957c;font-size:13px">${this.binds.moveSummary()} 이동 · 마우스 시점 · 왼쪽 버튼 길게 눌러 불꽃 모으기(떼면 발사) · ${this.binds.label('lockon')} 락온 · ${this.binds.label('dash')} 대시(무적) · ${this.binds.label('jump')} 점프 · ${this.binds.label('special')} 특수기 · Esc 일시정지(키 설정)</span>` : '<span style="color:#a8957c">도전할 보스를 고르세요.</span>'}
+      `${first ? `<span style="color:#a8957c;font-size:13px">${this.binds.moveSummary()} 이동 · 마우스 시점 · 왼쪽 버튼 길게 눌러 불꽃 모으기(떼면 발사) · ${this.binds.label('lockon')} 락온 · ${this.binds.label('dash')} 대시(무적) · ${this.binds.label('jump')} 점프 · ${this.binds.label('special')} 특수기 · Esc 설정 · 전투 중 일시정지</span>` : '<span style="color:#a8957c">도전할 보스를 고르세요.</span>'}
        <div class="bcards">${cards}</div>
        ${this.diffPicker()}
        <button type="button" class="startbtn">시작</button>
        <div class="minibtns">
          <button type="button" class="minibtn setbtn">⚙ 설정</button>
-         <button type="button" class="minibtn resetbtn">클리어 기록 초기화</button>
+         <button type="button" class="minibtn resetbtn">로컬 데이터 초기화</button>
        </div>`,
     );
     this.selFirst = first;
@@ -397,20 +401,18 @@ class Game implements Host {
       e.stopPropagation();
       if (!armed) {
         // 실수 방지: 한 번 더 눌러야 초기화된다
-        rb.textContent = '정말 초기화? 한 번 더 누르세요';
+        rb.textContent = '정말 삭제? 한 번 더 누르세요';
         rb.classList.add('armed');
         armed = window.setTimeout(() => {
           armed = 0;
-          rb.textContent = '클리어 기록 초기화';
+          rb.textContent = '로컬 데이터 초기화';
           rb.classList.remove('armed');
         }, 3000);
         return;
       }
       window.clearTimeout(armed);
       this.resetProgress();
-      this.pick = 1;
-      this.showSelect(this.selFirst);
-      this.hud.toast('클리어 기록을 초기화했습니다');
+      window.location.reload(); // 키 설정 · 난이도 등 메모리에 올라간 값도 기본값으로 돌아가도록 새로 시작한다
     });
     const btns = Array.from(document.querySelectorAll<HTMLButtonElement>('#ovbody .bcard'));
     for (const b of btns) {
@@ -625,6 +627,15 @@ class Game implements Host {
     else if (this.input.hit('Enter') && this.paused) this.onOverlayClick();
     if (this.state === 'clear') {
       if (this.input.tapped('retry') || this.input.hit('Enter')) this.onOverlayClick();
+    }
+    if (this.input.hit('Escape') && (this.state === 'title' || this.state === 'next')) {
+      // 보스 선택 화면: Esc 로 설정 열기/닫기 (키 입력 대기 중의 Esc 는 입력 취소로만 쓴다)
+      if (this.settingsOpen) {
+        if (!this.keyPanel.listening) {
+          this.keyPanel.close();
+          this.showSelect(this.selFirst);
+        }
+      } else this.showSettings();
     }
     if (this.input.hit('Escape') && (this.state === 'play' || this.state === 'intro' || this.paused) && performance.now() - this.lockLostAt > 300) {
       this.setPaused(!this.paused);
