@@ -170,18 +170,8 @@ class Game implements Host {
       this.sfx.drone(false);
     };
 
-    // 타이틀 → 시작
-    this.hud.showOverlay(
-      'DEEP NEST',
-      `1층 · 거미굴 — <b>동굴 여왕 거미</b><br>
-       <span style="color:#a8957c">${this.binds.moveSummary()} 이동 · 마우스 시점 회전 · 왼쪽 버튼 길게 눌러 불꽃 모으기(떼면 발사) · ${this.binds.label('lockon')} 락온 · ${this.binds.label('dash')} 대시(무적) · ${this.binds.label('jump')} 점프 · ${this.binds.label('special')} 특수기</span><br>
-       <span style="color:#a8957c">예고선과 바닥 마커가 보이면 피하고, 거미의 몸이 곧 신호다. 배(주황빛)가 약점.</span><br>
-       <span style="color:#a8957c">Esc 로 일시정지 — 그 화면에서 키를 바꿀 수 있습니다.</span><br>
-       ${this.diffPicker()}
-       <button type="button" class="startbtn">시작</button>`,
-    );
-    this.bindDiff();
-    this.bindStart();
+    // 타이틀 → 보스 선택 → 시작
+    this.showSelect(true);
     document.getElementById('overlay')!.addEventListener('click', () => this.onOverlayClick());
     window.addEventListener('blur', () => {
       if (!this.paused && (this.state === 'play' || this.state === 'intro')) this.setPaused(true);
@@ -269,19 +259,16 @@ class Game implements Host {
     this.sfx.unlock();
     if (this.paused) {
       this.setPaused(false);
-    } else if (this.state === 'over' && this.overShown) {
-      this.startFight(false);
-    } else if (this.state === 'clear') {
-      this.showNext(); // 클리어 화면 → 다음 보스 소개 + 난이도 선택 화면
+    } else if ((this.state === 'over' && this.overShown) || this.state === 'clear') {
+      this.showSelect(false); // 쓰러졌거나 클리어했으면 보스 선택 화면으로
     }
-    // 타이틀/다음 보스 화면은 '시작' 버튼(또는 Enter)으로만 시작한다
+    // 보스 선택 화면은 '시작' 버튼(또는 Enter)으로만 시작한다
   }
 
   /** 타이틀·다음 보스 화면에서 고른 난이도로 보스전을 시작한다 */
   private startPending() {
     this.sfx.unlock();
-    if (this.state === 'title') this.startFight(true);
-    else if (this.state === 'next') this.startFight(true, this.nextFloor);
+    if ((this.state === 'title' || this.state === 'next') && this.unlocked(this.pick)) this.startFight(true, this.pick);
   }
 
   private bindStart() {
@@ -292,21 +279,91 @@ class Game implements Host {
     });
   }
 
-  private nextFloor = 1;
+  /* ───────────── 보스 선택 ───────────── */
+  private pick = 1;
+  private static readonly CLEAR_KEY = 'deepnest.cleared';
 
-  /** 다음 보스 시작 화면: 보스 이름 + 난이도 선택 + 시작 버튼 */
-  private showNext() {
-    const more = this.floor < FLOORS;
-    this.nextFloor = more ? this.floor + 1 : this.floor;
-    const info = FLOOR_INFO[this.nextFloor - 1];
-    this.state = 'next';
+  /** 지금까지 처음으로 쓰러뜨린 가장 깊은 층 (예전 기록 키도 인정한다) */
+  private clearedFloor(): number {
+    let n = 0;
+    try {
+      n = parseInt(localStorage.getItem(Game.CLEAR_KEY) ?? '', 10) || 0;
+      for (let f = 1; f <= FLOORS; f++) if (Number.isFinite(parseFloat(localStorage.getItem(bestKey(f)) ?? ''))) n = Math.max(n, f);
+    } catch {
+      /* 저장소를 못 쓰면 기록 없이 */
+    }
+    return Math.min(n, FLOORS);
+  }
+  private unlocked(floor: number) {
+    return floor <= this.clearedFloor() + 1;
+  }
+  private markCleared(floor: number) {
+    try {
+      if (floor > this.clearedFloor()) localStorage.setItem(Game.CLEAR_KEY, String(floor));
+    } catch {
+      /* ignore */
+    }
+  }
+  private bestOf(floor: number): number {
+    try {
+      return parseFloat(localStorage.getItem(bestKey(floor)) ?? '');
+    } catch {
+      return NaN;
+    }
+  }
+
+  /** 보스 선택 화면: 큰 보스 카드 3장(앞 보스를 깨야 열린다) + 난이도 선택 + 시작. 타이틀 · 클리어 · 패배 뒤에 공통으로 온다 */
+  private showSelect(first: boolean) {
+    if (!first) {
+      // 전투가 끝난 뒤: 보스와 잔재를 치우고 캐릭터는 가만히 둔다
+      this.sfx.drone(false);
+      this.fx.telegraphs.clear();
+      this.exitDoor?.dispose();
+      this.exitDoor = null;
+      this.boss?.dispose();
+      this.boss = null;
+      this.targets = [];
+      this.player.vel.set(0, 0, 0);
+      this.player.dashT = 0;
+      this.showCursor(true);
+    }
+    this.state = first ? 'title' : 'next';
+    const open = Math.min(FLOORS, this.clearedFloor() + 1);
+    if (!this.unlocked(this.pick) || first) this.pick = first ? open : Math.min(this.pick, open);
+    const cards = FLOOR_INFO.map((info, i) => {
+      const f = i + 1;
+      const ok = this.unlocked(f);
+      const best = this.bestOf(f);
+      const done = f <= this.clearedFloor();
+      const status = !ok ? '🔒 이전 보스를 쓰러뜨려야 열립니다' : Number.isFinite(best) ? `최고 기록 ${fmtTime(best)}` : done ? '격파 완료' : '미도전';
+      return `<button type="button" class="bcard${ok ? '' : ' locked'}${f === this.pick ? ' sel' : ''}" data-f="${f}" ${ok ? '' : 'aria-disabled="true"'}>
+        <small class="fl">${info.label}</small>
+        <b class="nm">${ok ? info.name : '? ? ?'}</b>
+        <span class="st">${status}</span>
+      </button>`;
+    }).join('');
     this.hud.showOverlay(
-      info.label,
-      `<span style="font-size:22px;letter-spacing:.2em"><b>${info.name}</b></span><br>
-       <span style="color:#a8957c">${more ? '더 깊은 곳의 보스가 기다립니다. 체력은 가득 채워집니다.' : '마지막 층까지 모두 정복했습니다. 같은 보스에게 다시 도전합니다.'}</span><br>
+      first ? 'DEEP NEST' : '보스 선택',
+      `${first ? `<span style="color:#a8957c;font-size:13px">${this.binds.moveSummary()} 이동 · 마우스 시점 · 왼쪽 버튼 길게 눌러 불꽃 모으기(떼면 발사) · ${this.binds.label('lockon')} 락온 · ${this.binds.label('dash')} 대시(무적) · ${this.binds.label('jump')} 점프 · ${this.binds.label('special')} 특수기 · Esc 일시정지(키 설정)</span>` : '<span style="color:#a8957c">도전할 보스를 고르세요.</span>'}
+       <div class="bcards">${cards}</div>
        ${this.diffPicker()}
        <button type="button" class="startbtn">시작</button>`,
     );
+    const btns = Array.from(document.querySelectorAll<HTMLButtonElement>('#ovbody .bcard'));
+    for (const b of btns) {
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const f = parseInt(b.dataset.f ?? '1', 10);
+        if (!this.unlocked(f)) {
+          b.classList.remove('shake');
+          void b.offsetWidth;
+          b.classList.add('shake');
+          return;
+        }
+        this.pick = f;
+        for (const o of btns) o.classList.toggle('sel', o === b);
+      });
+    }
     this.bindDiff();
     this.bindStart();
   }
@@ -412,11 +469,9 @@ class Game implements Host {
     this.hud.showOverlay(
       '등불이 꺼졌다',
       `${this.boss?.title ?? ''}의 남은 체력 <b>${left}%</b><br>
-       <span style="color:#a8957c">같은 보스에게 처음부터 다시 도전합니다.</span><br>
-       ${this.diffPicker()}
-       <div class="go">${this.binds.label('retry')} 키 또는 클릭으로 재도전</div>`,
+       <span style="color:#a8957c">보스 선택 화면으로 돌아갑니다.</span><br>
+       <div class="go">${this.binds.label('retry')} 키 또는 클릭으로 보스 선택</div>`,
     );
-    this.bindDiff();
   }
 
   private showClear() {
@@ -437,20 +492,20 @@ class Game implements Host {
         /* ignore */
       }
     }
+    this.markCleared(floor);
     this.state = 'clear';
     this.player.vel.set(0, 0, 0);
     this.player.dashT = 0;
-    const more = floor < FLOORS;
     this.hud.showOverlay(
       `${floor}층 클리어`,
       `<b>${this.boss?.title ?? ''}</b> 격파<br>
        소요 시간 <b>${fmtTime(t)}</b>${isBest ? ' <span style="color:#ffd27a">· 최고 기록!</span>' : ` <span style="color:#a8957c">· 최고 ${fmtTime(best)}</span>`}<br>
        피격 <b>${this.player.hitsTaken}</b>회<br>
-       <button type="button" class="startbtn nextbtn">다음</button>`,
+       <button type="button" class="startbtn nextbtn">보스 선택</button>`,
     );
     document.querySelector<HTMLButtonElement>('#ovbody .nextbtn')?.addEventListener('click', (e) => {
       e.stopPropagation();
-      this.showNext();
+      this.showSelect(false);
     });
   }
 
