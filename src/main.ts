@@ -579,7 +579,7 @@ class Game implements Host {
       `<b>${this.boss?.title ?? ''}</b> 격파<br>
        소요 시간 <b>${fmtTime(t)}</b>${isBest ? ' <span style="color:#ffd27a">· 최고 기록!</span>' : ` <span style="color:#a8957c">· 최고 ${fmtTime(best)}</span>`}<br>
        피격 <b>${this.player.hitsTaken}</b>회<br>
-       <button type="button" class="startbtn nextbtn">보스 선택</button>`,
+       <button type="button" class="startbtn nextbtn">다음</button>`,
     );
     document.querySelector<HTMLButtonElement>('#ovbody .nextbtn')?.addEventListener('click', (e) => {
       e.stopPropagation();
