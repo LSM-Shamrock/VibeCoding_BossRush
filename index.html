@@ -141,7 +141,7 @@
       #overlay.compact { background: radial-gradient(ellipse at center, rgba(12,5,2,.82), rgba(12,5,2,.95)); }
       #overlay.compact #ovtitle { font-size: clamp(24px, 4.4vw, 40px); }
       #overlay.compact #ovbody { margin-top: 10px; }
-      .settings { margin: 0 auto; display: flex; gap: 14px; align-items: flex-start; justify-content: center; width: min(760px, 94vw); text-align: left; cursor: default; }
+      .settings { margin: 0 auto; display: flex; gap: 14px; align-items: flex-start; justify-content: center; width: min(1240px, 94vw); text-align: left; cursor: default; }
       .st-tabs { flex: none; display: flex; flex-direction: column; gap: 8px; width: 120px; }
       .st-tab { font: inherit; font-size: 14px; letter-spacing: .12em; cursor: pointer; padding: 10px 12px; text-align: left; border: 1px solid rgba(255,205,130,.28); border-radius: 6px; background: rgba(20,8,3,.6); color: #b8a68a; transition: border-color .1s, color .1s, background .1s; }
       .st-tab:hover { border-color: rgba(255,205,130,.7); color: #ffe9b8; }
@@ -165,7 +165,7 @@
       .kp-fixed { margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(255,200,120,.12); }
       .kp-debug { margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(255,200,120,.12); }
       .kp-debug summary { cursor: pointer; font-size: 12px; color: var(--dim); padding: 2px 0 4px; }
-      .st-grid { grid-template-columns: 130px 1fr 50px; align-items: center; }
+      .st-grid { grid-template-columns: 100px minmax(0, 1fr) 50px; column-gap: 10px; align-items: center; }
       .st-grid .kp-label { padding: 8px 0; }
       .st-val { color: var(--gold); font-size: 13px; text-align: right; }
       .kp-head > span:first-child { font-family: var(--serif); font-size: 15px; font-weight: 700; letter-spacing: .16em; color: #ffe3b0; }
