@@ -187,6 +187,10 @@
       @keyframes bshake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
       #ovbody .ovbtns { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-top: 8px; }
       #ovbody .ovbtns .startbtn { width: 240px; padding-left: 0; padding-right: 0; }
+      #ovbody .minibtns { margin-top: 18px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+      #ovbody .minibtn { font: inherit; font-size: 13px; cursor: pointer; padding: 6px 14px; border: 1px solid rgba(255,205,130,.3); border-radius: 6px; background: rgba(20,8,3,.6); color: #b8a68a; transition: border-color .1s, color .1s; }
+      #ovbody .minibtn:hover { border-color: rgba(255,205,130,.8); color: #ffe9b8; }
+      #ovbody .minibtn.armed { border-color: #ff6a5a; color: #ffd9d2; background: rgba(110,12,12,.6); }
       #ovbody .diffs { margin: 14px 0 4px; display: flex; gap: 10px; justify-content: center; }
       #ovbody .diff { font: inherit; cursor: pointer; min-width: 112px; padding: 8px 14px; border: 1px solid rgba(255,205,130,.35); border-radius: 6px; background: rgba(20,8,3,.6); color: #cdb996; display: flex; flex-direction: column; align-items: center; line-height: 1.35; transition: transform .1s, border-color .1s, background .1s; }
       #ovbody .diff b { font-size: 16px; letter-spacing: .12em; }

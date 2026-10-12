@@ -268,6 +268,7 @@ class Game implements Host {
   /** 타이틀·다음 보스 화면에서 고른 난이도로 보스전을 시작한다 */
   private startPending() {
     this.sfx.unlock();
+    if (this.settingsOpen) return;
     if ((this.state === 'title' || this.state === 'next') && this.unlocked(this.pick)) this.startFight(true, this.pick);
   }
 
@@ -281,6 +282,37 @@ class Game implements Host {
 
   /* ───────────── 보스 선택 ───────────── */
   private pick = 1;
+  private selFirst = true;
+  private settingsOpen = false;
+
+  /** 클리어 진행 + 최고 기록을 모두 지운다 */
+  private resetProgress() {
+    try {
+      localStorage.removeItem(Game.CLEAR_KEY);
+      for (let f = 1; f <= FLOORS; f++) localStorage.removeItem(bestKey(f));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /** 설정 화면: 키 설정 패널 + 돌아가기 */
+  private showSettings() {
+    this.settingsOpen = true;
+    this.hud.showOverlay('설정', '');
+    this.keyPanel.open();
+    const body = document.getElementById('ovbody')!;
+    body.append(this.keyPanel.el);
+    const back = document.createElement('button');
+    back.type = 'button';
+    back.className = 'startbtn';
+    back.textContent = '돌아가기';
+    back.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.keyPanel.close();
+      this.showSelect(this.selFirst);
+    });
+    body.append(back);
+  }
   private static readonly CLEAR_KEY = 'deepnest.cleared';
 
   /** 지금까지 처음으로 쓰러뜨린 가장 깊은 층 (예전 기록 키도 인정한다) */
@@ -347,8 +379,39 @@ class Game implements Host {
       `${first ? `<span style="color:#a8957c;font-size:13px">${this.binds.moveSummary()} 이동 · 마우스 시점 · 왼쪽 버튼 길게 눌러 불꽃 모으기(떼면 발사) · ${this.binds.label('lockon')} 락온 · ${this.binds.label('dash')} 대시(무적) · ${this.binds.label('jump')} 점프 · ${this.binds.label('special')} 특수기 · Esc 일시정지(키 설정)</span>` : '<span style="color:#a8957c">도전할 보스를 고르세요.</span>'}
        <div class="bcards">${cards}</div>
        ${this.diffPicker()}
-       <button type="button" class="startbtn">시작</button>`,
+       <button type="button" class="startbtn">시작</button>
+       <div class="minibtns">
+         <button type="button" class="minibtn setbtn">⚙ 설정</button>
+         <button type="button" class="minibtn resetbtn">클리어 기록 초기화</button>
+       </div>`,
     );
+    this.selFirst = first;
+    this.settingsOpen = false;
+    document.querySelector<HTMLButtonElement>('#ovbody .setbtn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.showSettings();
+    });
+    const rb = document.querySelector<HTMLButtonElement>('#ovbody .resetbtn');
+    let armed = 0;
+    rb?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!armed) {
+        // 실수 방지: 한 번 더 눌러야 초기화된다
+        rb.textContent = '정말 초기화? 한 번 더 누르세요';
+        rb.classList.add('armed');
+        armed = window.setTimeout(() => {
+          armed = 0;
+          rb.textContent = '클리어 기록 초기화';
+          rb.classList.remove('armed');
+        }, 3000);
+        return;
+      }
+      window.clearTimeout(armed);
+      this.resetProgress();
+      this.pick = 1;
+      this.showSelect(this.selFirst);
+      this.hud.toast('클리어 기록을 초기화했습니다');
+    });
     const btns = Array.from(document.querySelectorAll<HTMLButtonElement>('#ovbody .bcard'));
     for (const b of btns) {
       b.addEventListener('click', (e) => {
@@ -556,7 +619,9 @@ class Game implements Host {
     this.time += raw;
 
     // 키 입력 (오버레이 상태와 무관한 것)
-    if (this.input.hit('Enter') && (this.state === 'title' || this.state === 'next')) this.startPending();
+    if (this.input.hit('Enter') && (this.state === 'title' || this.state === 'next')) {
+      if (!this.settingsOpen) this.startPending();
+    }
     else if (this.input.hit('Enter') && this.paused) this.onOverlayClick();
     if (this.state === 'clear') {
       if (this.input.tapped('retry') || this.input.hit('Enter')) this.onOverlayClick();
