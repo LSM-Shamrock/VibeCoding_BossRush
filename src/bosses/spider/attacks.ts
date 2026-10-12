@@ -346,10 +346,13 @@ function stagger(s: Spider): AttackScript {
       {
         at: 0,
         fn: () => {
-          s.faceMode = 'hold';
+          // 휘청이며 몸이 돌아 배(약점)가 플레이어 쪽을 향한다 — 메시지와 실제 노출이 일치하도록
+          s.faceMode = 'to';
+          s.faceYaw = yawOf(s.player.pos.x - s.pos.x, s.player.pos.z - s.pos.z) + Math.PI;
+          s.faceRate = 7;
           s.setPose('stagger', 6);
           s.setExposed(true);
-          s.host.banner('새끼를 모두 처치!', '여왕이 휘청인다 — 약점을 노려라', 1.8);
+          s.host.banner('새끼를 모두 처치!', '여왕이 휘청인다 — 드러난 배를 노려라', 1.8);
           s.host.shake(0.5);
         },
       },

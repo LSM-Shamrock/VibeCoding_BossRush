@@ -50,7 +50,14 @@ export class Spider implements Boss, MinionOwner {
 
   hp: number = S.maxHp;
   alive = true;
-  exposed = false;
+  /** 약점 노출 구간인가 (스크립트가 켠다) — 실제로 노출되는지는 아래 exposed 가 배가 플레이어 쪽을 향하는지까지 본다 */
+  private exposeFlag = false;
+  /** 약점(배)이 정말 때릴 수 있게 노출됐는가: 노출 구간 + 배(꼬리쪽)가 플레이어 쪽을 향함. 메시지 · 발광 · 피해 배율이 모두 이 값을 따른다 */
+  get exposed() {
+    if (!this.exposeFlag) return false;
+    const away = this.rig.yaw + Math.PI; // 배가 향한 방향
+    return Math.abs(wrapPi(this.yawToPlayer() - away)) < 1.15;
+  }
   /** 등장 연출이 끝나 전투가 시작됐는가 */
   ready = false;
   attacksOn = true;
@@ -135,8 +142,8 @@ export class Spider implements Boss, MinionOwner {
     this.rig.setPose(name, rate);
   }
   setExposed(on: boolean) {
-    this.exposed = on;
-    this.rig.setExposed(on);
+    this.exposeFlag = on;
+    this.rig.setExposed(on && this.exposed);
   }
 
   /* ───────────────────────── 등장 ───────────────────────── */
@@ -217,6 +224,7 @@ export class Spider implements Boss, MinionOwner {
     }
 
     if (this.jump) this.updateJump(dt);
+    this.rig.setExposed(this.exposed); // 배가 돌아서 보일 때만 약점 발광
 
     switch (this.state) {
       case 'enter':
