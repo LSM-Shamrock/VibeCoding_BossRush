@@ -259,8 +259,6 @@ class Game implements Host {
     this.sfx.unlock();
     if (this.paused) {
       this.setPaused(false);
-    } else if (this.state === 'over' && this.overShown) {
-      this.startFight(false); // 키보드(재도전 키/Enter) → 같은 보스 재도전. 보스 선택은 버튼으로
     } else if (this.state === 'clear') {
       this.showSelect(false); // 클리어했으면 보스 선택 화면으로
     }
@@ -475,7 +473,7 @@ class Game implements Host {
          <button type="button" class="startbtn retrybtn">재도전</button>
          <button type="button" class="startbtn selbtn">보스 선택</button>
        </div>
-       <div class="go">${this.binds.label('retry')} 키 · Enter 로 재도전</div>`,
+`,
     );
     document.querySelector<HTMLButtonElement>('#ovbody .retrybtn')?.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -560,7 +558,7 @@ class Game implements Host {
     // 키 입력 (오버레이 상태와 무관한 것)
     if (this.input.hit('Enter') && (this.state === 'title' || this.state === 'next')) this.startPending();
     else if (this.input.hit('Enter') && this.paused) this.onOverlayClick();
-    if ((this.state === 'over' && this.overShown) || this.state === 'clear') {
+    if (this.state === 'clear') {
       if (this.input.tapped('retry') || this.input.hit('Enter')) this.onOverlayClick();
     }
     if (this.input.hit('Escape') && (this.state === 'play' || this.state === 'intro' || this.paused) && performance.now() - this.lockLostAt > 300) {
