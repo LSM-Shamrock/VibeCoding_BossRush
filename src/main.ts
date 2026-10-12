@@ -16,6 +16,7 @@ import { Serpent } from './bosses/serpent/serpent';
 import { Hud } from './hud';
 import { Keybinds } from './keybinds';
 import { KeyPanel } from './keypanel';
+import { SettingsPanel } from './settingspanel';
 import type { Boss, FloatKind, Host, Target } from './types';
 import { PAL } from './palette';
 import { WORLD } from './world';
@@ -68,6 +69,7 @@ class Game implements Host {
   private bloom: UnrealBloomPass;
   private binds = new Keybinds();
   private keyPanel: KeyPanel;
+  private settings: SettingsPanel;
   private input: Input;
   private arena: Arena;
   readonly player: Player;
@@ -145,6 +147,7 @@ class Game implements Host {
     this.player = new Player(this);
     this.hud = new Hud(this.camera);
     this.keyPanel = new KeyPanel(this.binds);
+    this.settings = new SettingsPanel(this.keyPanel, this.sfx);
     this.refreshKeyLabels();
     this.binds.onChange(() => this.refreshKeyLabels());
 
@@ -303,9 +306,9 @@ class Game implements Host {
   private showSettings() {
     this.settingsOpen = true;
     this.hud.showOverlay('설정', '');
-    this.keyPanel.open();
+    this.settings.open();
     const body = document.getElementById('ovbody')!;
-    body.append(this.keyPanel.el);
+    body.append(this.settings.el);
     const back = document.createElement('button');
     back.type = 'button';
     back.className = 'startbtn';
@@ -460,8 +463,8 @@ class Game implements Host {
   private setPaused(p: boolean) {
     this.paused = p;
     if (p) {
-      this.keyPanel.open();
-      this.hud.showPause(this.keyPanel.el);
+      this.settings.open();
+      this.hud.showPause(this.settings.el);
     } else {
       this.keyPanel.close();
       this.hud.hideOverlay();

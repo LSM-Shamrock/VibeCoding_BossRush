@@ -4,6 +4,30 @@ const MASTER = 0.8;
 export class Sfx {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+  /** 효과음 · 배경 음악 각각의 음량 조절 버스 (설정 창의 사운드 탭) */
+  private sfxBus!: GainNode;
+  private bgmBus!: GainNode;
+  vol = { sfx: 1, bgm: 1 };
+  private static readonly VOL_KEY = 'deepnest.volume';
+  constructor() {
+    try {
+      const o = JSON.parse(localStorage.getItem(Sfx.VOL_KEY) ?? 'null');
+      if (o && typeof o.sfx === 'number') this.vol.sfx = Math.min(1, Math.max(0, o.sfx));
+      if (o && typeof o.bgm === 'number') this.vol.bgm = Math.min(1, Math.max(0, o.bgm));
+    } catch {
+      /* 저장값이 없거나 못 읽으면 기본값 */
+    }
+  }
+  setVolume(kind: 'sfx' | 'bgm', v: number) {
+    this.vol[kind] = Math.min(1, Math.max(0, v));
+    const bus = kind === 'sfx' ? this.sfxBus : this.bgmBus;
+    if (bus) bus.gain.value = this.vol[kind];
+    try {
+      localStorage.setItem(Sfx.VOL_KEY, JSON.stringify(this.vol));
+    } catch {
+      /* ignore */
+    }
+  }
   private noiseBuf: AudioBuffer | null = null;
   muted = false;
 
@@ -16,6 +40,12 @@ export class Sfx {
         this.master = this.ctx.createGain();
         this.master.gain.value = this.muted ? 0 : MASTER;
         this.master.connect(this.ctx.destination);
+        this.sfxBus = this.ctx.createGain();
+        this.sfxBus.gain.value = this.vol.sfx;
+        this.sfxBus.connect(this.master);
+        this.bgmBus = this.ctx.createGain();
+        this.bgmBus.gain.value = this.vol.bgm;
+        this.bgmBus.connect(this.master);
         const len = this.ctx.sampleRate;
         this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
         const d = this.noiseBuf.getChannelData(0);
@@ -44,7 +74,7 @@ export class Sfx {
     g.gain.setValueAtTime(0.0001, t);
     g.gain.exponentialRampToValueAtTime(vol, t + 0.008);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g).connect(this.master);
+    o.connect(g).connect(this.sfxBus);
     o.start(t);
     o.stop(t + dur + 0.03);
   }
@@ -62,7 +92,7 @@ export class Sfx {
     const g = c.createGain();
     g.gain.setValueAtTime(vol, t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    s.connect(f).connect(g).connect(this.master);
+    s.connect(f).connect(g).connect(this.sfxBus);
     s.start(t);
     s.stop(t + dur + 0.03);
   }
@@ -126,7 +156,7 @@ export class Sfx {
     lp.Q.value = 0.5;
     const wg = c.createGain();
     wg.gain.value = 0.0001;
-    wSrc.connect(wf).connect(lp).connect(wg).connect(this.master);
+    wSrc.connect(wf).connect(lp).connect(wg).connect(this.sfxBus);
     // ② 숨결: 낮은 대역만 통과시킨 잡음 (몸통 있는 공기 소리)
     const rSrc = mkNoise();
     const rf = c.createBiquadFilter();
@@ -135,7 +165,7 @@ export class Sfx {
     rf.Q.value = 0.4;
     const rg = c.createGain();
     rg.gain.value = 0.0001;
-    rSrc.connect(rf).connect(rg).connect(this.master);
+    rSrc.connect(rf).connect(rg).connect(this.sfxBus);
     // ③ 바람이 일렁이도록 아주 느린 두 개의 흔들림 (세기, 음색). 박자가 느리고 불규칙해서 기계 떨림처럼 들리지 않는다.
     const swell = c.createOscillator();
     swell.frequency.value = 0.9;
@@ -320,7 +350,7 @@ export class Sfx {
     f2.type = 'lowpass';
     f2.frequency.setValueAtTime(base * 9, t);
     f2.frequency.exponentialRampToValueAtTime(base * 2.5, t + len);
-    f1.connect(f2).connect(g).connect(this.master);
+    f1.connect(f2).connect(g).connect(this.sfxBus);
     const lfo = c.createOscillator();
     lfo.frequency.value = 18 + base * 0.02;
     const lg = c.createGain();
@@ -388,7 +418,7 @@ export class Sfx {
       lg.gain.value = 160;
       lfo.connect(lg).connect(f.frequency);
       lfo.start();
-      src.connect(f).connect(g).connect(this.master);
+      src.connect(f).connect(g).connect(this.sfxBus);
       src.start();
       this.windNodes = { src, f, g };
     }
@@ -465,7 +495,7 @@ export class Sfx {
     const lg = c.createGain();
     lg.gain.value = 0.26;
     lfo.connect(lg).connect(am.gain);
-    src.connect(hp).connect(bp).connect(am).connect(env).connect(this.master);
+    src.connect(hp).connect(bp).connect(am).connect(env).connect(this.sfxBus);
     src.start(t, Math.random() * 0.5);
     src.stop(t + len + 0.05);
     lfo.start(t);
@@ -483,7 +513,7 @@ export class Sfx {
     env2.gain.exponentialRampToValueAtTime(0.05 * vol, t + att * 1.4);
     env2.gain.setValueAtTime(0.05 * vol, t + len * 0.5);
     env2.gain.exponentialRampToValueAtTime(0.0001, t + len);
-    src2.connect(bp2).connect(env2).connect(this.master);
+    src2.connect(bp2).connect(env2).connect(this.sfxBus);
     src2.start(t, Math.random() * 0.5);
     src2.stop(t + len + 0.05);
   }
@@ -556,7 +586,7 @@ export class Sfx {
       const lg = c.createGain();
       lg.gain.value = 0;
       lfo.connect(lg).connect(amp.gain);
-      src.connect(bp).connect(lp).connect(amp).connect(this.master);
+      src.connect(bp).connect(lp).connect(amp).connect(this.sfxBus);
       src.start();
       lfo.start();
       this.slitherNodes = { src, lfo, lg, amp, bp };
@@ -618,7 +648,7 @@ export class Sfx {
       lfo.connect(lg).connect(f.frequency);
       lfo.start();
       oscs.push(lfo);
-      f.connect(g).connect(this.master);
+      f.connect(g).connect(this.bgmBus);
       this.droneNodes = { o: oscs, g, f };
     }
     const d = this.droneNodes;
