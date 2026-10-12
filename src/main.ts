@@ -382,9 +382,8 @@ class Game implements Host {
       </button>`;
     }).join('');
     this.hud.showOverlay(
-      first ? 'DEEP NEST' : '보스 선택',
-      `${first ? '' : '<span style="color:#a8957c">도전할 보스를 고르세요.</span>'}
-       <div class="bcards">${cards}</div>
+      'DEEP NEST',
+      `<div class="bcards">${cards}</div>
        ${this.diffPicker()}
        <button type="button" class="startbtn">시작</button>
        <div class="minibtns">
