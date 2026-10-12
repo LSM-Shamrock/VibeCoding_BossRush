@@ -55,18 +55,26 @@ export class SettingsPanel {
   }
 
   private soundPane() {
+    // 조작 키 탭과 같은 틀: 머리글 한 줄 + 한 줄짜리 행들
     const pane = document.createElement('div');
-    pane.className = 'st-sound';
-    const row = (label: string, kind: 'sfx' | 'bgm', note: string) => {
-      const r = document.createElement('div');
-      r.className = 'st-row';
-      const val = document.createElement('b');
+    pane.className = 'keypanel st-sound';
+    pane.innerHTML = '<div class="kp-top"><div class="kp-head"><span>사운드</span><span class="kp-msg idle">슬라이더로 음량 조절</span></div></div>';
+    const body = document.createElement('div');
+    body.className = 'kp-body';
+    const grid = document.createElement('div');
+    grid.className = 'kp-grid st-grid';
+    const row = (label: string, kind: 'sfx' | 'bgm') => {
+      const l = document.createElement('div');
+      l.className = 'kp-label';
+      l.textContent = label;
       const slider = document.createElement('input');
       slider.type = 'range';
       slider.min = '0';
       slider.max = '100';
       slider.step = '1';
       slider.value = String(Math.round(this.sfx.vol[kind] * 100));
+      const val = document.createElement('b');
+      val.className = 'st-val';
       const sync = () => {
         val.textContent = `${slider.value}%`;
         slider.style.setProperty('--p', `${slider.value}%`);
@@ -78,17 +86,12 @@ export class SettingsPanel {
       });
       // 효과음은 손을 뗄 때 짧게 들려줘서 크기를 가늠할 수 있게 한다
       if (kind === 'sfx') slider.addEventListener('change', () => { this.sfx.unlock(); this.sfx.ready(); });
-      const head = document.createElement('div');
-      head.className = 'st-rowhead';
-      const l = document.createElement('span');
-      l.textContent = label;
-      head.append(l, val);
-      const n = document.createElement('small');
-      n.textContent = note;
-      r.append(head, slider, n);
-      return r;
+      grid.append(l, slider, val);
     };
-    pane.append(row('효과음', 'sfx', '발사 · 피격 · 보스 포효 등 모든 효과음'), row('배경 음악', 'bgm', '전투 중 깔리는 배경 음악'));
+    row('효과음', 'sfx');
+    row('배경 음악', 'bgm');
+    body.append(grid);
+    pane.append(body);
     return pane;
   }
 }
